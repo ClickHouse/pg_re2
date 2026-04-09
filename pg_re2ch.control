@@ -1,0 +1,4 @@
+comment = 'ClickHouse-compatible regex functions using RE2'
+default_version = '0.1'
+module_pathname = '$libdir/pg_re2ch'
+relocatable = true

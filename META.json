@@ -1,0 +1,24 @@
+{
+  "name": "pg_re2ch",
+  "abstract": "ClickHouse-compatible regex functions using RE2",
+  "version": "0.1.0",
+  "maintainer": "erpre",
+  "license": "postgresql",
+  "provides": {
+    "pg_re2ch": {
+      "version": "0.1.0",
+      "file": "pg_re2ch.control"
+    }
+  },
+  "prereqs": {
+    "runtime": {
+      "requires": {
+        "PostgreSQL": "13.0.0"
+      }
+    }
+  },
+  "meta-spec": {
+    "version": "1.0.0",
+    "url": "https://pgxn.org/meta/spec.txt"
+  }
+}
