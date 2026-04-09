@@ -1,0 +1,61 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format-22
+        run: |
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' | sudo tee /etc/apt/sources.list.d/llvm-22.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format-22
+
+      - name: Check clang-format
+        run: clang-format-22 --dry-run --Werror src/*.c src/*.h src/*.cpp
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pg: [18, 17, 16]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add PGDG apt repo
+        run: |
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+
+      - name: Install PostgreSQL ${{ matrix.pg }} and RE2
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            postgresql-${{ matrix.pg }} \
+            postgresql-server-dev-${{ matrix.pg }} \
+            libre2-dev
+
+      - name: Start PostgreSQL
+        run: |
+          sudo pg_lsclusters -h | awk '{print $1, $2}' | while read v n; do sudo pg_dropcluster --stop "$v" "$n"; done
+          sudo pg_createcluster ${{ matrix.pg }} main --start -p 5432 -- --auth-local=trust
+
+      - name: Build
+        run: make PG_CONFIG=/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
+
+      - name: Install
+        run: sudo make install PG_CONFIG=/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
+
+      - name: Test
+        run: make installcheck PG_CONFIG=/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config PGUSER=postgres
+
+      - name: Show diff on failure
+        if: failure()
+        run: cat regression.diffs || true
