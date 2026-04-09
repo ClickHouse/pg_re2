@@ -1,13 +1,13 @@
 {
-  "name": "pg_re2ch",
+  "name": "re2",
   "abstract": "ClickHouse-compatible regex functions using RE2",
   "version": "0.1.0",
   "maintainer": "erpre",
   "license": "postgresql",
   "provides": {
-    "pg_re2ch": {
+    "re2": {
       "version": "0.1.0",
-      "file": "pg_re2ch.control"
+      "file": "re2.control"
     }
   },
   "prereqs": {

@@ -15,36 +15,36 @@ extern "C"
 	typedef struct
 	{
 		const char *data; /* NULL if no match */
-		int			len;
+		size_t		len;
 	} re2_span;
 
 	typedef struct re2_pattern re2_pattern;
 
-	re2_pattern *re2_compile(const char *pattern, int pattern_len, char *errbuf, size_t errbuf_size);
+	re2_pattern *re2_compile(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size);
 	void		 re2_free(re2_pattern *pat);
 	int			 re2_num_captures(const re2_pattern *pat);
 
-	bool re2_match(const re2_pattern *pat, const char *text, int text_len);
+	bool re2_match(const re2_pattern *pat, const char *text, size_t text_len);
 
-	re2_span re2_extract(const re2_pattern *pat, const char *text, int text_len);
+	re2_span re2_extract(const re2_pattern *pat, const char *text, size_t text_len);
 
-	re2_span *re2_extract_all(const re2_pattern *pat, const char *text, int text_len, int *count, char *errbuf,
+	re2_span *re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *count, char *errbuf,
 							  size_t errbuf_size);
 
-	re2_span re2_regexp_extract(const re2_pattern *pat, const char *text, int text_len, int group_idx, char *errbuf,
+	re2_span re2_regexp_extract(const re2_pattern *pat, const char *text, size_t text_len, int group_idx, char *errbuf,
 								size_t errbuf_size);
 
-	re2_span *re2_extract_groups(const re2_pattern *pat, const char *text, int text_len, int *count, char *errbuf,
+	re2_span *re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, int *count, char *errbuf,
 								 size_t errbuf_size);
 
 	/* returns palloc'd varlena, caller casts to text* or bytea* */
-	void *re2_replace_one(const re2_pattern *pat, const char *text, int text_len, const char *repl, int repl_len,
+	void *re2_replace_one(const re2_pattern *pat, const char *text, size_t text_len, const char *repl, size_t repl_len,
 						  char *errbuf, size_t errbuf_size);
 
-	void *re2_replace_all(const re2_pattern *pat, const char *text, int text_len, const char *repl, int repl_len,
+	void *re2_replace_all(const re2_pattern *pat, const char *text, size_t text_len, const char *repl, size_t repl_len,
 						  char *errbuf, size_t errbuf_size);
 
-	int re2_count_matches(const re2_pattern *pat, const char *text, int text_len);
+	int re2_count_matches(const re2_pattern *pat, const char *text, size_t text_len);
 
 #ifdef __cplusplus
 }
