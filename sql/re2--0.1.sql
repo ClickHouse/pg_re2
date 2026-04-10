@@ -1,4 +1,4 @@
-\echo Use "CREATE EXTENSION pg_re2ch" to load this file. \quit
+\echo Use "CREATE EXTENSION re2" to load this file. \quit
 
 CREATE FUNCTION re2match(text, text) RETURNS boolean
 AS 'MODULE_PATHNAME', 'pgre2ch_match'

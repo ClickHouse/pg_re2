@@ -30,7 +30,7 @@ default_opts(void)
 }
 
 re2_pattern *
-re2_compile(const char *pattern, int pattern_len, char *errbuf, size_t errbuf_size)
+re2_compile(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size)
 {
 	auto  opts = default_opts();
 	auto *pat = new (std::nothrow) re2_pattern(opts, re2::StringPiece(pattern, pattern_len));
@@ -61,7 +61,7 @@ re2_num_captures(const re2_pattern *pat)
 }
 
 bool
-re2_match(const re2_pattern *pat, const char *text, int text_len)
+re2_match(const re2_pattern *pat, const char *text, size_t text_len)
 {
 	return re2::RE2::PartialMatch(re2::StringPiece(text, text_len), pat->re);
 }
@@ -89,12 +89,12 @@ sp_to_span(re2::StringPiece sp)
 {
 	re2_span s;
 	s.data = sp.data();
-	s.len = (int)sp.size();
+	s.len = sp.size();
 	return s;
 }
 
 re2_span
-re2_extract(const re2_pattern *pat, const char *text, int text_len)
+re2_extract(const re2_pattern *pat, const char *text, size_t text_len)
 {
 	re2::StringPiece input(text, text_len);
 	int				 ngroups = pat->re.NumberOfCapturingGroups();
@@ -111,7 +111,7 @@ re2_extract(const re2_pattern *pat, const char *text, int text_len)
 }
 
 re2_span *
-re2_extract_all(const re2_pattern *pat, const char *text, int text_len, int *count, char *errbuf, size_t errbuf_size)
+re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *count, char *errbuf, size_t errbuf_size)
 {
 	re2::StringPiece input(text, text_len);
 	int				 ngroups = pat->re.NumberOfCapturingGroups();
@@ -122,7 +122,7 @@ re2_extract_all(const re2_pattern *pat, const char *text, int text_len, int *cou
 	re2_span		*out = (re2_span *)palloc(capacity * sizeof(re2_span));
 	size_t			 pos = 0;
 
-	while (pos <= (size_t)text_len)
+	while (pos <= text_len)
 	{
 		re2::StringPiece sub[2];
 		if (!pat->re.Match(input, pos, input.size(), re2::RE2::UNANCHORED, sub, needed))
@@ -150,7 +150,7 @@ re2_extract_all(const re2_pattern *pat, const char *text, int text_len, int *cou
 }
 
 re2_span
-re2_regexp_extract(const re2_pattern *pat, const char *text, int text_len, int group_idx, char *errbuf,
+re2_regexp_extract(const re2_pattern *pat, const char *text, size_t text_len, int group_idx, char *errbuf,
 				   size_t errbuf_size)
 {
 	re2_span empty = { NULL, 0 };
@@ -179,7 +179,8 @@ re2_regexp_extract(const re2_pattern *pat, const char *text, int text_len, int g
 }
 
 re2_span *
-re2_extract_groups(const re2_pattern *pat, const char *text, int text_len, int *count, char *errbuf, size_t errbuf_size)
+re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, int *count, char *errbuf,
+				   size_t errbuf_size)
 {
 	int ngroups = pat->re.NumberOfCapturingGroups();
 	if (ngroups == 0)
@@ -204,18 +205,18 @@ re2_extract_groups(const re2_pattern *pat, const char *text, int text_len, int *
 	{
 		re2::StringPiece &g = sub[i + 1];
 		out[i].data = g.data();
-		out[i].len = g.data() ? (int)g.size() : 0;
+		out[i].len = g.data() ? g.size() : 0;
 	}
 	delete[] sub;
 	return out;
 }
 
 static bool
-validate_rewrite(const re2_pattern *pat, const char *repl, int repl_len, char *errbuf, size_t errbuf_size)
+validate_rewrite(const re2_pattern *pat, const char *repl, size_t repl_len, char *errbuf, size_t errbuf_size)
 {
 	int ngroups = pat->re.NumberOfCapturingGroups();
 
-	for (int i = 0; i < repl_len; i++)
+	for (size_t i = 0; i < repl_len; i++)
 	{
 		if (repl[i] == '\\' && i + 1 < repl_len)
 		{
@@ -239,8 +240,8 @@ validate_rewrite(const re2_pattern *pat, const char *repl, int repl_len, char *e
 static void *
 make_varlena(const std::string &s)
 {
-	int	  len = (int)s.size();
-	char *out = (char *)palloc(len + VARHDRSZ);
+	size_t len = s.size();
+	char  *out = (char *)palloc(len + VARHDRSZ);
 
 	SET_VARSIZE(out, len + VARHDRSZ);
 	memcpy(VARDATA(out), s.data(), len);
@@ -248,8 +249,8 @@ make_varlena(const std::string &s)
 }
 
 void *
-re2_replace_one(const re2_pattern *pat, const char *text, int text_len, const char *repl, int repl_len, char *errbuf,
-				size_t errbuf_size)
+re2_replace_one(const re2_pattern *pat, const char *text, size_t text_len, const char *repl, size_t repl_len,
+				char *errbuf, size_t errbuf_size)
 {
 	if (!validate_rewrite(pat, repl, repl_len, errbuf, errbuf_size))
 		return NULL;
@@ -268,8 +269,8 @@ re2_replace_one(const re2_pattern *pat, const char *text, int text_len, const ch
 }
 
 void *
-re2_replace_all(const re2_pattern *pat, const char *text, int text_len, const char *repl, int repl_len, char *errbuf,
-				size_t errbuf_size)
+re2_replace_all(const re2_pattern *pat, const char *text, size_t text_len, const char *repl, size_t repl_len,
+				char *errbuf, size_t errbuf_size)
 {
 	if (!validate_rewrite(pat, repl, repl_len, errbuf, errbuf_size))
 		return NULL;
@@ -288,14 +289,14 @@ re2_replace_all(const re2_pattern *pat, const char *text, int text_len, const ch
 }
 
 int
-re2_count_matches(const re2_pattern *pat, const char *text, int text_len)
+re2_count_matches(const re2_pattern *pat, const char *text, size_t text_len)
 {
 	re2::StringPiece input(text, text_len);
 	re2::StringPiece match;
 	int				 n = 0;
 	size_t			 pos = 0;
 
-	while (pos <= (size_t)text_len)
+	while (pos <= text_len)
 	{
 		if (!pat->re.Match(input, pos, input.size(), re2::RE2::UNANCHORED, &match, 1))
 			break;

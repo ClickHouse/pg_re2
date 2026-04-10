@@ -8,16 +8,16 @@
 typedef struct
 {
 	char		*pattern; /* malloc'd copy */
-	int			 pattern_len;
+	size_t		 pattern_len;
 	re2_pattern *compiled;
 } Re2CacheEntry;
 
 static Re2CacheEntry cache[RE2_CACHE_SIZE];
 
 re2_pattern *
-re2_cache_lookup(const char *pattern, int pattern_len, char *errbuf, size_t errbuf_size)
+re2_cache_lookup(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size)
 {
-	uint32		   h = hash_bytes((const unsigned char *)pattern, pattern_len);
+	uint32		   h = hash_bytes((const unsigned char *)pattern, (int)pattern_len);
 	int			   bucket = h % RE2_CACHE_SIZE;
 	Re2CacheEntry *entry = &cache[bucket];
 

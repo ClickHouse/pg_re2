@@ -1,9 +1,9 @@
-EXTENSION    = pg_re2ch
+EXTENSION    = re2
 EXTVERSION   = 0.1
 
 DATA         = sql/$(EXTENSION)--$(EXTVERSION).sql
 MODULE_big   = $(EXTENSION)
-OBJS         = src/pg_re2ch.o src/re2_cache.o src/re2_wrapper.o
+OBJS         = src/pg_re2.o src/re2_cache.o src/re2_wrapper.o
 
 PG_CONFIG   ?= pg_config
 PG_CXXFLAGS  = -std=c++17
