@@ -64,9 +64,9 @@ compile_arg_icase(text *pattern)
 
 /* ---- text functions ---- */
 
-PG_FUNCTION_INFO_V1(pgre2ch_match);
+PG_FUNCTION_INFO_V1(pgre2_match);
 Datum
-pgre2ch_match(PG_FUNCTION_ARGS)
+pgre2_match(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -74,9 +74,9 @@ pgre2ch_match(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(re2_match(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_extract);
+PG_FUNCTION_INFO_V1(pgre2_extract);
 Datum
-pgre2ch_extract(PG_FUNCTION_ARGS)
+pgre2_extract(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -84,9 +84,9 @@ pgre2ch_extract(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(span_to_text(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_extractall);
+PG_FUNCTION_INFO_V1(pgre2_extractall);
 Datum
-pgre2ch_extractall(PG_FUNCTION_ARGS)
+pgre2_extractall(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -113,9 +113,9 @@ pgre2ch_extractall(PG_FUNCTION_ARGS)
 	PG_RETURN_ARRAYTYPE_P(arr);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_regexpextract);
+PG_FUNCTION_INFO_V1(pgre2_regexpextract);
 Datum
-pgre2ch_regexpextract(PG_FUNCTION_ARGS)
+pgre2_regexpextract(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -131,9 +131,9 @@ pgre2ch_regexpextract(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(span_to_text(s));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_extractgroups);
+PG_FUNCTION_INFO_V1(pgre2_extractgroups);
 Datum
-pgre2ch_extractgroups(PG_FUNCTION_ARGS)
+pgre2_extractgroups(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -163,9 +163,9 @@ pgre2ch_extractgroups(PG_FUNCTION_ARGS)
 	PG_RETURN_ARRAYTYPE_P(arr);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_replaceregexpone);
+PG_FUNCTION_INFO_V1(pgre2_replaceregexpone);
 Datum
-pgre2ch_replaceregexpone(PG_FUNCTION_ARGS)
+pgre2_replaceregexpone(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -180,9 +180,9 @@ pgre2ch_replaceregexpone(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(result);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_replaceregexpall);
+PG_FUNCTION_INFO_V1(pgre2_replaceregexpall);
 Datum
-pgre2ch_replaceregexpall(PG_FUNCTION_ARGS)
+pgre2_replaceregexpall(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -197,9 +197,9 @@ pgre2ch_replaceregexpall(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(result);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_countmatches);
+PG_FUNCTION_INFO_V1(pgre2_countmatches);
 Datum
-pgre2ch_countmatches(PG_FUNCTION_ARGS)
+pgre2_countmatches(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -207,9 +207,9 @@ pgre2ch_countmatches(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_countmatchescaseinsensitive);
+PG_FUNCTION_INFO_V1(pgre2_countmatchescaseinsensitive);
 Datum
-pgre2ch_countmatchescaseinsensitive(PG_FUNCTION_ARGS)
+pgre2_countmatchescaseinsensitive(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg_icase(PG_GETARG_TEXT_PP(1));
@@ -248,9 +248,9 @@ decon_patterns(ArrayType *arr, int *npatterns)
 	return pats;
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_multimatchany);
+PG_FUNCTION_INFO_V1(pgre2_multimatchany);
 Datum
-pgre2ch_multimatchany(PG_FUNCTION_ARGS)
+pgre2_multimatchany(PG_FUNCTION_ARGS)
 {
 	text		 *haystack = PG_GETARG_TEXT_PP(0);
 	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
@@ -267,9 +267,9 @@ pgre2ch_multimatchany(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(false);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_multimatchanyindex);
+PG_FUNCTION_INFO_V1(pgre2_multimatchanyindex);
 Datum
-pgre2ch_multimatchanyindex(PG_FUNCTION_ARGS)
+pgre2_multimatchanyindex(PG_FUNCTION_ARGS)
 {
 	text		 *haystack = PG_GETARG_TEXT_PP(0);
 	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
@@ -286,9 +286,9 @@ pgre2ch_multimatchanyindex(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(0);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_multimatchallindices);
+PG_FUNCTION_INFO_V1(pgre2_multimatchallindices);
 Datum
-pgre2ch_multimatchallindices(PG_FUNCTION_ARGS)
+pgre2_multimatchallindices(PG_FUNCTION_ARGS)
 {
 	text		 *haystack = PG_GETARG_TEXT_PP(0);
 	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
@@ -313,9 +313,9 @@ pgre2ch_multimatchallindices(PG_FUNCTION_ARGS)
 
 /* ==== bytea overloads ==== */
 
-PG_FUNCTION_INFO_V1(pgre2ch_match_bytea);
+PG_FUNCTION_INFO_V1(pgre2_match_bytea);
 Datum
-pgre2ch_match_bytea(PG_FUNCTION_ARGS)
+pgre2_match_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -323,9 +323,9 @@ pgre2ch_match_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(re2_match(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_extract_bytea);
+PG_FUNCTION_INFO_V1(pgre2_extract_bytea);
 Datum
-pgre2ch_extract_bytea(PG_FUNCTION_ARGS)
+pgre2_extract_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -333,9 +333,9 @@ pgre2ch_extract_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(span_to_bytea(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_extractall_bytea);
+PG_FUNCTION_INFO_V1(pgre2_extractall_bytea);
 Datum
-pgre2ch_extractall_bytea(PG_FUNCTION_ARGS)
+pgre2_extractall_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -362,9 +362,9 @@ pgre2ch_extractall_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_ARRAYTYPE_P(arr);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_regexpextract_bytea);
+PG_FUNCTION_INFO_V1(pgre2_regexpextract_bytea);
 Datum
-pgre2ch_regexpextract_bytea(PG_FUNCTION_ARGS)
+pgre2_regexpextract_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -380,9 +380,9 @@ pgre2ch_regexpextract_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(span_to_bytea(s));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_extractgroups_bytea);
+PG_FUNCTION_INFO_V1(pgre2_extractgroups_bytea);
 Datum
-pgre2ch_extractgroups_bytea(PG_FUNCTION_ARGS)
+pgre2_extractgroups_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -412,9 +412,9 @@ pgre2ch_extractgroups_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_ARRAYTYPE_P(arr);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_replaceregexpone_bytea);
+PG_FUNCTION_INFO_V1(pgre2_replaceregexpone_bytea);
 Datum
-pgre2ch_replaceregexpone_bytea(PG_FUNCTION_ARGS)
+pgre2_replaceregexpone_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -429,9 +429,9 @@ pgre2ch_replaceregexpone_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(result);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_replaceregexpall_bytea);
+PG_FUNCTION_INFO_V1(pgre2_replaceregexpall_bytea);
 Datum
-pgre2ch_replaceregexpall_bytea(PG_FUNCTION_ARGS)
+pgre2_replaceregexpall_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -446,9 +446,9 @@ pgre2ch_replaceregexpall_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(result);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_countmatches_bytea);
+PG_FUNCTION_INFO_V1(pgre2_countmatches_bytea);
 Datum
-pgre2ch_countmatches_bytea(PG_FUNCTION_ARGS)
+pgre2_countmatches_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
@@ -456,9 +456,9 @@ pgre2ch_countmatches_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_countmatchescaseinsensitive_bytea);
+PG_FUNCTION_INFO_V1(pgre2_countmatchescaseinsensitive_bytea);
 Datum
-pgre2ch_countmatchescaseinsensitive_bytea(PG_FUNCTION_ARGS)
+pgre2_countmatchescaseinsensitive_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg_icase(PG_GETARG_TEXT_PP(1));
@@ -466,9 +466,9 @@ pgre2ch_countmatchescaseinsensitive_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_multimatchany_bytea);
+PG_FUNCTION_INFO_V1(pgre2_multimatchany_bytea);
 Datum
-pgre2ch_multimatchany_bytea(PG_FUNCTION_ARGS)
+pgre2_multimatchany_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		 *haystack = PG_GETARG_BYTEA_PP(0);
 	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
@@ -485,9 +485,9 @@ pgre2ch_multimatchany_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(false);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_multimatchanyindex_bytea);
+PG_FUNCTION_INFO_V1(pgre2_multimatchanyindex_bytea);
 Datum
-pgre2ch_multimatchanyindex_bytea(PG_FUNCTION_ARGS)
+pgre2_multimatchanyindex_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		 *haystack = PG_GETARG_BYTEA_PP(0);
 	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
@@ -504,9 +504,9 @@ pgre2ch_multimatchanyindex_bytea(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(0);
 }
 
-PG_FUNCTION_INFO_V1(pgre2ch_multimatchallindices_bytea);
+PG_FUNCTION_INFO_V1(pgre2_multimatchallindices_bytea);
 Datum
-pgre2ch_multimatchallindices_bytea(PG_FUNCTION_ARGS)
+pgre2_multimatchallindices_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		 *haystack = PG_GETARG_BYTEA_PP(0);
 	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
