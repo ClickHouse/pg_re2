@@ -16,11 +16,11 @@ SHLIB_LINK   = -lre2 -lstdc++
 TESTS        ?= $(wildcard test/sql/*.sql)
 REGRESS      = $(patsubst test/sql/%.sql,%,$(TESTS))
 REGRESS_OPTS = --inputdir=test --load-extension=$(EXTENSION)
+EXTRA_CLEAN = src/version.h $(EXTENSION)-$(DISTVERSION).zip
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
-EXTRA_CLEAN = src/version.h
 
 # Require the version header.
 $(OBJS): src/version.h
@@ -41,9 +41,25 @@ lint: src/*.c src/*.h src/*.cpp
 lint22: src/*.c src/*.h src/*.cpp
 	clang-format-22 --dry-run --Werror $^
 
+# Build a PGXN distribution bundle.
+dist: $(EXTENSION)-$(DISTVERSION).zip
+
+$(EXTENSION)-$(DISTVERSION).zip:
+	git archive-all -v --prefix "$(EXTENSION)-$(DISTVERSION)/" --force-submodules $(EXTENSION)-$(DISTVERSION).zip
+
+# Test the PGXN distribution.
+dist-test: $(EXTENSION)-$(DISTVERSION).zip
+	unzip $(EXTENSION)-$(DISTVERSION).zip
+	cd $(EXTENSION)-$(DISTVERSION)
+	make && make install && make installcheck
+
 .PHONY: apt-install-tools
 apt-install-tools:
 	curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg
 	echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' | sudo tee /etc/apt/sources.list.d/llvm-22.list
 	apt-get update
 	apt-get install -y --no-install-recommends clang-format-22
+
+.PHONY: release-notes # Show release notes for current version (must have `mknotes` in PATH).
+release-notes: CHANGELOG.md
+	mknotes -v v$(DISTVERSION) -f $< -r https://github.com/$(or $(GITHUB_REPOSITORY),ClickHouse/pg_re2)

@@ -1,7 +1,10 @@
 *.o
 *.so
 *.dylib
+*.dll
 *.bc
+/re2-*
+/results/
 regression.diffs
 regression.out
 .vscode/
