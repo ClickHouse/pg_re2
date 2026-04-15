@@ -8,8 +8,14 @@
 #include "utils/lsyscache.h"
 
 #include "re2_cache.h"
+#include "version.h"
 
+/* Extension metadata for the server. */
+#ifdef PG_MODULE_MAGIC_EXT
+PG_MODULE_MAGIC_EXT(.name = "re2", .version = RE2_EXT_VERSION);
+#else
 PG_MODULE_MAGIC;
+#endif
 
 /* build text datum from span (single palloc) */
 static text *

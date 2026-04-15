@@ -1,5 +1,9 @@
-EXTENSION    = re2
-EXTVERSION   = 0.1
+EXTENSION    = $(shell grep -m 1 '"name":' META.json | \
+               sed -e 's/[[:space:]]*"name":[[:space:]]*"\([^"]*\)",/\1/')
+EXTVERSION   = $(shell grep -m 1 'default_version' re2.control | \
+               sed -e "s/[[:space:]]*default_version[[:space:]]*=[[:space:]]*'\([^']*\)',\{0,1\}/\1/")
+DISTVERSION  = $(shell grep -m 1 '^[[:space:]]\{2\}"version":' META.json | \
+               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
 
 DATA         = sql/$(EXTENSION)--$(EXTVERSION).sql
 MODULE_big   = $(EXTENSION)
@@ -15,6 +19,15 @@ REGRESS_OPTS = --inputdir=test --load-extension=$(EXTENSION)
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
+
+EXTRA_CLEAN = src/version.h
+
+# Require the version header.
+$(OBJS): src/version.h
+
+# Versioned source file.
+src/version.h: src/version.h.in
+	sed -e 's,__VERSION__,$(DISTVERSION),g' $< > $@
 
 .PHONY: format
 format: src/*.c src/*.h src/*.cpp

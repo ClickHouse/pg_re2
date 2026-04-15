@@ -2,7 +2,7 @@
 *.so
 *.dylib
 *.bc
-results/
 regression.diffs
 regression.out
-test/schedule
+.vscode/
+src/version.h

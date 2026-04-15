@@ -1,0 +1,1 @@
+#define RE2_EXT_VERSION "__VERSION__"
