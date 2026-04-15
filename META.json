@@ -2,12 +2,14 @@
   "name": "re2",
   "abstract": "ClickHouse-compatible regex functions using RE2",
   "version": "0.1.0",
-  "maintainer": "erpre",
+  "maintainer": "Philip Dubé",
   "license": "postgresql",
   "provides": {
     "re2": {
-      "version": "0.1.0",
-      "file": "re2.control"
+      "abstract": "ClickHouse-compatible regex functions using RE2",
+      "docfile": "doc/re2.md",
+      "file": "re2.control",
+      "version": "0.1.0"
     }
   },
   "prereqs": {
@@ -20,5 +22,16 @@
   "meta-spec": {
     "version": "1.0.0",
     "url": "https://pgxn.org/meta/spec.txt"
-  }
+  },
+  "resources": {
+    "bugtracker": {
+      "web": "https://github.com/clickhouse/pg_re2/issues/"
+    },
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/clickhouse/pg_re2.git",
+      "web": "https://github.com/clickhouse/pg_re2/"
+    }
+  },
+  "tags": ["regular expression", "regex", "regexp", "re2", "ClickHouse"]
 }

@@ -21,7 +21,6 @@ EXTRA_CLEAN = src/version.h $(EXTENSION)-$(DISTVERSION).zip
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
-
 # Require the version header.
 $(OBJS): src/version.h
 
