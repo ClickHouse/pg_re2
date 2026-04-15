@@ -36,15 +36,15 @@ CREATE FUNCTION re2countmatchescaseinsensitive(text, text) RETURNS integer
 AS 'MODULE_PATHNAME', 'pgre2_countmatchescaseinsensitive'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION re2multimatchany(text, text[]) RETURNS boolean
+CREATE FUNCTION re2multimatchany(text, VARIADIC text[]) RETURNS boolean
 AS 'MODULE_PATHNAME', 'pgre2_multimatchany'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION re2multimatchanyindex(text, text[]) RETURNS integer
+CREATE FUNCTION re2multimatchanyindex(text, VARIADIC text[]) RETURNS integer
 AS 'MODULE_PATHNAME', 'pgre2_multimatchanyindex'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION re2multimatchallindices(text, text[]) RETURNS integer[]
+CREATE FUNCTION re2multimatchallindices(text, VARIADIC text[]) RETURNS integer[]
 AS 'MODULE_PATHNAME', 'pgre2_multimatchallindices'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
@@ -86,14 +86,14 @@ CREATE FUNCTION re2countmatchescaseinsensitive(bytea, text) RETURNS integer
 AS 'MODULE_PATHNAME', 'pgre2_countmatchescaseinsensitive_bytea'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION re2multimatchany(bytea, text[]) RETURNS boolean
+CREATE FUNCTION re2multimatchany(bytea, VARIADIC text[]) RETURNS boolean
 AS 'MODULE_PATHNAME', 'pgre2_multimatchany_bytea'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION re2multimatchanyindex(bytea, text[]) RETURNS integer
+CREATE FUNCTION re2multimatchanyindex(bytea, VARIADIC text[]) RETURNS integer
 AS 'MODULE_PATHNAME', 'pgre2_multimatchanyindex_bytea'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE FUNCTION re2multimatchallindices(bytea, text[]) RETURNS integer[]
+CREATE FUNCTION re2multimatchallindices(bytea, VARIADIC text[]) RETURNS integer[]
 AS 'MODULE_PATHNAME', 'pgre2_multimatchallindices_bytea'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

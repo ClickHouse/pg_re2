@@ -112,21 +112,21 @@ SELECT re2countmatchescaseinsensitive('foobarFOO', 'foo');
 SELECT re2countmatchescaseinsensitive('ooOO', 'oo');
 
 -- multimatchany
-SELECT re2multimatchany('hello world', ARRAY['\d+', 'world']);
-SELECT re2multimatchany('hello world', ARRAY['\d+', '^\d+$']);
-SELECT re2multimatchany('abc', ARRAY['']);                       -- empty pattern matches
-SELECT re2multimatchany('', ARRAY['']);                          -- empty haystack + empty pattern
-SELECT re2multimatchany('', ARRAY['some string']);               -- empty haystack, no match
-SELECT re2multimatchany('abc', ARRAY[]::text[]);                -- empty array: no match
-SELECT re2multimatchany(NULL, ARRAY['\d+']) IS NULL AS mm_null;
+SELECT re2multimatchany('hello world', '\d+', 'world');
+SELECT re2multimatchany('hello world', '\d+', '^\d+$');
+SELECT re2multimatchany('abc', '');                       -- empty pattern matches
+SELECT re2multimatchany('', '');                          -- empty haystack + empty pattern
+SELECT re2multimatchany('', 'some string');               -- empty haystack, no match
+SELECT re2multimatchany('abc', VARIADIC ARRAY[]::text[]);                -- empty array: no match
+SELECT re2multimatchany(NULL, '\d+') IS NULL AS mm_null;
 
 -- multimatchanyindex
-SELECT re2multimatchanyindex('hello world', ARRAY['\d+', 'world', 'hello']);
-SELECT re2multimatchanyindex('hello world', ARRAY['\d+', '^\d+$']);
+SELECT re2multimatchanyindex('hello world', '\d+', 'world', 'hello');
+SELECT re2multimatchanyindex('hello world', '\d+', '^\d+$');
 
 -- multimatchallindices
-SELECT re2multimatchallindices('hello world', ARRAY['hello', '\d+', 'world', 'o']);
-SELECT re2multimatchallindices('test', ARRAY['\d+', '[A-Z]+']);
+SELECT re2multimatchallindices('hello world', 'hello', '\d+', 'world', 'o');
+SELECT re2multimatchallindices('test', '\d+', '[A-Z]+');
 
 -- invalid pattern
 \set ON_ERROR_STOP off
@@ -161,4 +161,4 @@ SELECT re2replaceregexpall('a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::
 SELECT re2countmatches('a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::bytea || 'c'::bytea, '\x00');
 
 -- multimatchany with \0 haystack
-SELECT re2multimatchany('a'::bytea || '\x00'::bytea || 'key="v"'::bytea, ARRAY['key', 'nope']);
+SELECT re2multimatchany('a'::bytea || '\x00'::bytea || 'key="v"'::bytea, 'key', 'nope');
