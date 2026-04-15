@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file. It uses the
 
 ### 📚 Documentation
 
-*   Reference documentation in [doc/pg_re.md](doc/pg_re.md)
+*   Reference documentation in [doc/re2.md](doc/re2.md)
 
 ### 📔 Notes
 
