@@ -1,4 +1,6 @@
+# re2 extension
 comment = 'ClickHouse-compatible regex functions using RE2'
 default_version = '0.1'
-module_pathname = '$libdir/re2'
+module_pathname = 're2'
 relocatable = true
+trusted = true

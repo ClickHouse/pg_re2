@@ -123,7 +123,7 @@ CREATE EXTENSION re2 SCHEMA env;
 Dependencies
 ------------
 
-The `re2` extension requires PostgreSQL 13 or higher, [re2], and the C
+The `re2` extension requires PostgreSQL 16 or higher, [re2], and the C
 standard library, `<stdlib.h>`.
 
 Copyright and License

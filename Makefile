@@ -17,5 +17,20 @@ PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
 .PHONY: format
-format:
-	clang-format -i src/*.c src/*.h src/*.cpp
+format: src/*.c src/*.h src/*.cpp
+	clang-format -i $^
+
+.PHONY: lint
+lint: src/*.c src/*.h src/*.cpp
+	clang-format --dry-run --Werror $^
+
+.PHONY: lint22
+lint22: src/*.c src/*.h src/*.cpp
+	clang-format-22 --dry-run --Werror $^
+
+.PHONY: apt-install-tools
+apt-install-tools:
+	curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+	echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' | sudo tee /etc/apt/sources.list.d/llvm-22.list
+	apt-get update
+	apt-get install -y --no-install-recommends clang-format-22
