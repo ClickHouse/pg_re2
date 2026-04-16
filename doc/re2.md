@@ -268,7 +268,9 @@ Returns the number of matches found.
 
 ### `re2multimatchany()` ###
 
-Check if at least one of multiple regular expression patterns matches a haystack.
+Check if at least one of multiple regular expression patterns matches a
+haystack. Pass one or more patterns or an array of patterns prepended with
+`VARIADIC`.
 
 If you only want to search multiple substrings in a string, you can use
 function [`re2multisearchany`](#re2multisearchany), which it works much faster
@@ -277,7 +279,8 @@ than this function.
 **Syntax**
 
 ```sql
-SELECT re2multimatchany( :haystack, :pattern[, :pattern, ...] );
+SELECT re2multimatchany( :haystack, :pattern1, :pattern2, ... );
+SELECT re2multimatchany( :haystack, VARIADIC ARRAY[:pattern1, :pattern2, ...] );
 ```
 
 **Parameters**
@@ -286,7 +289,7 @@ SELECT re2multimatchany( :haystack, :pattern[, :pattern, ...] );
 : String in which patterns are searched. `TEXT` or `BYTEA`
 
 `:pattern`
-: An array of one or more regular expression patterns. `TEXT`
+: A list or variadic array of one or more regular expression patterns. `TEXT`
 
 **Returns `BOOL`**
 
@@ -297,10 +300,12 @@ Returns `true` if the pattern matches, `false` otherwise.
 ### `re2multimatchanyindex()` ###
 
 Like [`re2multimatchany`](#re2multimatchany) but returns any index that
-matches the haystack.
+matches the haystack. Pass one or more patterns or an array of patterns
+prepended with `VARIADIC`.
 
 ```sql
-SELECT re2multimatchanyindex(  :haystack, :pattern[, :pattern, ...] );
+SELECT re2multimatchanyindex( :haystack, :pattern1, :pattern2, ... );
+SELECT re2multimatchanyindex( :haystack, VARIADIC ARRAY[:pattern1, :pattern2, ...] );
 ```
 
 **Parameters**
@@ -309,7 +314,7 @@ SELECT re2multimatchanyindex(  :haystack, :pattern[, :pattern, ...] );
 : String in which patterns are searched. `TEXT`
 
 `:pattern`
-: An array of one or more regular expression patterns. `TEXT`
+: A list or variadic array of one or more regular expression patterns. `TEXT`
 
 **Returns `INT`**
 
@@ -320,12 +325,16 @@ no match is found.
 
 ### `re2multimatchallindices()` ###
 
-Like multiMatchAny but returns the array of all indices that match the haystack in any order.
+Like multiMatchAny but returns the array of all indices that match the
+haystack in any order. Pass one or more patterns or an array of patterns
+prepended with `VARIADIC`.
+
 
 **Syntax**
 
 ```sql
-SELECT re2multimatchallindices( :haystack, :pattern[, :pattern, ...] );
+SELECT re2multimatchallindices( :haystack, :pattern1, :pattern2, ... );
+SELECT re2multimatchallindices( :haystack, VARIADIC ARRAY[:pattern1, :pattern2, ...] );
 ```
 
 **Parameters**
@@ -334,7 +343,7 @@ SELECT re2multimatchallindices( :haystack, :pattern[, :pattern, ...] );
 : String in which patterns are searched. `TEXT`
 
 `:pattern`
-: An array of one or more regular expression patterns. `TEXT`
+: A list or variadic array of one or more regular expression patterns. `TEXT`
 
 **Returns `INT[]`**
 

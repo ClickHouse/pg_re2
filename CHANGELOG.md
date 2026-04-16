@@ -7,6 +7,17 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
+## [v0.1.1] — Unreleased
+
+### 📚 Documentation
+
+*   Documented the use of the variadic list of pattern arguments in the
+    `re2multimatch*` functions and how an array can be passed via the
+    `VARIADIC` keyword to mimic the array syntax for the corresponding
+    ClickHouse functions.
+
+  [v0.1.1]: https://github.com/clickhouse/pg_re2/compare/v0.1.0...v0.1.1
+
 ## [v0.1.0] — 2026-04-15
 
 ### ⚡ Improvements
