@@ -7,7 +7,11 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
-## [v0.1.1] — Unreleased
+## [v0.1.1] — 2026-04-16
+
+This release makes binary-only changes. Once installed, any existing use of
+re2 v0.1 will get its benefits on reload without needing to
+`ALTER EXTENSION UPDATE`.
 
 ### ⚡ Improvements
 
