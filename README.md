@@ -1,7 +1,7 @@
 pg_re2 Postgres Extension
 =========================
 
-[![PGXN version](https://badge.fury.io/pg/pg_re2.svg)](https://badge.fury.io/pg/pg_re2)
+[![PGXN version](https://badge.fury.io/pg/re2.svg)](https://badge.fury.io/pg/re2)
 [![Build Status](https://github.com/ClickHouse/pg_re2/actions/workflows/ci.yml/badge.svg)](https://github.com/ClickHouse/pg_re2/actions/workflows/ci.yml)
 
 This library contains a single PostgreSQL extension, `re2`, which provides
