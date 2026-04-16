@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file. It uses the
 
 ## [v0.1.1] — Unreleased
 
+### ⚡ Improvements
+
+*   Added support for Postgres versions 13+ (previously 16+).
+
 ### 📚 Documentation
 
 *   Documented the use of the variadic list of pattern arguments in the

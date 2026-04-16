@@ -11,7 +11,7 @@ CREATE EXTENSION re2;
 
 This library contains a single PostgreSQL extension, `re2`, which provides
 [ClickHouse]-compatible [regular expression functions] powered by [re2]. It
-supports PostgreSQL 16 and higher.
+supports PostgreSQL 13 and higher.
 
 To align with ClickHouse regular expression function behavior, this extension
 provides functions in which:

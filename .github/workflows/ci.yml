@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [18, 17, 16]
+        pg: [18, 17, 16, 15, 14, 13]
     name: 🐘 PostgreSQL ${{ matrix.pg }}
     runs-on: ubuntu-latest
     container: pgxn/pgxn-tools

@@ -1,7 +1,9 @@
 extern "C"
 {
 #include "postgres.h"
+#if PG_VERSION_NUM >= 160000
 #include "varatt.h"
+#endif
 }
 
 /* PG Min/Max macros conflict with abseil headers */
