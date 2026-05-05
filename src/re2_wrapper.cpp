@@ -15,6 +15,7 @@ extern "C"
 #include <new>
 #include <re2/re2.h>
 #include <string>
+#include <vector>
 
 struct re2_pattern
 {
@@ -119,35 +120,43 @@ re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *
 	int				 ngroups = pat->re.NumberOfCapturingGroups();
 	int				 target = ngroups > 0 ? 1 : 0;
 	int				 needed = target + 1;
-	int				 capacity = 16;
-	int				 n = 0;
-	re2_span		*out = (re2_span *)palloc(capacity * sizeof(re2_span));
 	size_t			 pos = 0;
 
-	while (pos <= text_len)
-	{
-		re2::StringPiece sub[2];
-		if (!pat->re.Match(input, pos, input.size(), re2::RE2::UNANCHORED, sub, needed))
-			break;
-
-		if (n == capacity)
-		{
-			capacity *= 2;
-			out = (re2_span *)repalloc(out, capacity * sizeof(re2_span));
-		}
-		out[n++] = sp_to_span(sub[target]);
-
-		size_t match_end = (sub[0].data() - text) + sub[0].size();
-		pos = match_end > pos ? match_end : pos + 1;
-	}
-
 	errbuf[0] = '\0';
-	*count = n;
-	if (n == 0)
+	*count = 0;
+
+	std::vector<re2_span> spans;
+	try
 	{
-		pfree(out);
+		while (pos <= text_len)
+		{
+			re2::StringPiece sub[2];
+			if (!pat->re.Match(input, pos, input.size(), re2::RE2::UNANCHORED, sub, needed))
+				break;
+
+			spans.push_back(sp_to_span(sub[target]));
+
+			size_t match_end = (sub[0].data() - text) + sub[0].size();
+			pos = match_end > pos ? match_end : pos + 1;
+		}
+	}
+	catch (std::bad_alloc &)
+	{
+		snprintf(errbuf, errbuf_size, "out of memory");
 		return NULL;
 	}
+
+	if (spans.empty())
+		return NULL;
+
+	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	if (!out)
+	{
+		snprintf(errbuf, errbuf_size, "out of memory");
+		return NULL;
+	}
+	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
+	*count = (int)spans.size();
 	return out;
 }
 
@@ -201,8 +210,15 @@ re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, in
 		return NULL;
 	}
 
+	re2_span *out = (re2_span *)palloc_extended(ngroups * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	if (!out)
+	{
+		delete[] sub;
+		snprintf(errbuf, errbuf_size, "out of memory");
+		*count = 0;
+		return NULL;
+	}
 	*count = ngroups;
-	re2_span *out = (re2_span *)palloc(ngroups * sizeof(re2_span));
 	for (int i = 0; i < ngroups; i++)
 	{
 		re2::StringPiece &g = sub[i + 1];
@@ -238,13 +254,15 @@ validate_rewrite(const re2_pattern *pat, const char *repl, size_t repl_len, char
 	return true;
 }
 
-/* palloc varlena ready for PG_RETURN_TEXT_P/PG_RETURN_BYTEA_P */
+/* palloc varlena ready for PG_RETURN_TEXT_P/PG_RETURN_BYTEA_P, NULL on OOM */
 static void *
 make_varlena(const std::string &s)
 {
 	size_t len = s.size();
-	char  *out = (char *)palloc(len + VARHDRSZ);
+	char  *out = (char *)palloc_extended(len + VARHDRSZ, MCXT_ALLOC_NO_OOM);
 
+	if (!out)
+		return NULL;
 	SET_VARSIZE(out, len + VARHDRSZ);
 	memcpy(VARDATA(out), s.data(), len);
 	return out;
@@ -261,7 +279,10 @@ re2_replace_one(const re2_pattern *pat, const char *text, size_t text_len, const
 	{
 		std::string result(text, text_len);
 		re2::RE2::Replace(&result, pat->re, re2::StringPiece(repl, repl_len));
-		return make_varlena(result);
+		void *out = make_varlena(result);
+		if (!out)
+			snprintf(errbuf, errbuf_size, "out of memory");
+		return out;
 	}
 	catch (std::bad_alloc &)
 	{
@@ -281,7 +302,10 @@ re2_replace_all(const re2_pattern *pat, const char *text, size_t text_len, const
 	{
 		std::string result(text, text_len);
 		re2::RE2::GlobalReplace(&result, pat->re, re2::StringPiece(repl, repl_len));
-		return make_varlena(result);
+		void *out = make_varlena(result);
+		if (!out)
+			snprintf(errbuf, errbuf_size, "out of memory");
+		return out;
 	}
 	catch (std::bad_alloc &)
 	{

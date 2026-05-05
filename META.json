@@ -1,7 +1,7 @@
 {
   "name": "re2",
   "abstract": "ClickHouse-compatible regex functions using RE2",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "maintainer": "Philip Dubé",
   "license": "postgresql",
   "provides": {
@@ -9,7 +9,7 @@
       "abstract": "ClickHouse-compatible regex functions using RE2",
       "docfile": "doc/re2.md",
       "file": "re2.control",
-      "version": "0.1.1"
+      "version": "0.1.2"
     }
   },
   "prereqs": {
