@@ -5,7 +5,7 @@ EXTVERSION   = $(shell grep -m 1 'default_version' re2.control | \
 DISTVERSION  = $(shell grep -m 1 '^[[:space:]]\{2\}"version":' META.json | \
                sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
 
-DATA         = sql/$(EXTENSION)--$(EXTVERSION).sql
+DATA         = $(wildcard sql/$(EXTENSION)--*.sql)
 MODULE_big   = $(EXTENSION)
 OBJS         = src/pg_re2.o src/re2_cache.o src/re2_wrapper.o
 

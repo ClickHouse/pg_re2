@@ -18,16 +18,16 @@ PG_MODULE_MAGIC;
 #endif
 
 /* build text datum from span (single palloc) */
-static text *
+static Datum
 span_to_text(re2_span s)
 {
 	if (s.data)
-		return cstring_to_text_with_len(s.data, (int)s.len);
-	return cstring_to_text_with_len("", 0);
+		return PointerGetDatum(cstring_to_text_with_len(s.data, (int)s.len));
+	return PointerGetDatum(cstring_to_text_with_len("", 0));
 }
 
 /* build bytea datum from span (single palloc) */
-static bytea *
+static Datum
 span_to_bytea(re2_span s)
 {
 	size_t len = s.data ? s.len : 0;
@@ -36,7 +36,7 @@ span_to_bytea(re2_span s)
 	SET_VARSIZE(result, len + VARHDRSZ);
 	if (len > 0)
 		memcpy(VARDATA(result), s.data, len);
-	return result;
+	return PointerGetDatum(result);
 }
 
 static re2_pattern *
@@ -87,7 +87,7 @@ pgre2_extract(PG_FUNCTION_ARGS)
 	text		*haystack = PG_GETARG_TEXT_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
 
-	PG_RETURN_TEXT_P(span_to_text(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
+	PG_RETURN_DATUM(span_to_text(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_extractall);
@@ -113,7 +113,7 @@ pgre2_extractall(PG_FUNCTION_ARGS)
 
 	elems = (Datum *)palloc(count * sizeof(Datum));
 	for (int i = 0; i < count; i++)
-		elems[i] = PointerGetDatum(span_to_text(spans[i]));
+		elems[i] = span_to_text(spans[i]);
 
 	arr = construct_array(elems, count, TEXTOID, -1, false, TYPALIGN_INT);
 	PG_RETURN_ARRAYTYPE_P(arr);
@@ -134,7 +134,7 @@ pgre2_regexpextract(PG_FUNCTION_ARGS)
 	if (errbuf[0] != '\0')
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
 
-	PG_RETURN_TEXT_P(span_to_text(s));
+	PG_RETURN_DATUM(span_to_text(s));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_extractgroups);
@@ -163,10 +163,213 @@ pgre2_extractgroups(PG_FUNCTION_ARGS)
 
 	elems = (Datum *)palloc(count * sizeof(Datum));
 	for (int i = 0; i < count; i++)
-		elems[i] = PointerGetDatum(span_to_text(spans[i]));
+		elems[i] = span_to_text(spans[i]);
 
 	arr = construct_array(elems, count, TEXTOID, -1, false, TYPALIGN_INT);
 	PG_RETURN_ARRAYTYPE_P(arr);
+}
+
+/*
+ * Build a 2D ArrayType from element-builder fn applied to spans.
+ * spans: row-major (match × group). vertical=true builds (match, group); else (group, match).
+ * Empty result yields a 0-D empty array (postgres can't represent shape (k, 0)).
+ */
+typedef Datum (*span_to_datum_fn)(re2_span s);
+
+static ArrayType *
+build_groups_2d(re2_span *spans, int matches, int ngroups, bool vertical, span_to_datum_fn build, Oid elemoid)
+{
+	Datum *elems;
+	int	   total = matches * ngroups;
+	int	   dims[2];
+	int	   lbs[2] = { 1, 1 };
+
+	if (total == 0)
+		return construct_empty_array(elemoid);
+
+	elems = (Datum *)palloc(total * sizeof(Datum));
+
+	if (vertical)
+	{
+		dims[0] = matches;
+		dims[1] = ngroups;
+		for (int i = 0; i < total; i++)
+			elems[i] = build(spans[i]);
+	}
+	else
+	{
+		dims[0] = ngroups;
+		dims[1] = matches;
+		for (int g = 0; g < ngroups; g++)
+			for (int m = 0; m < matches; m++)
+				elems[g * matches + m] = build(spans[m * ngroups + g]);
+	}
+
+	return construct_md_array(elems, NULL, 2, dims, lbs, elemoid, -1, false, TYPALIGN_INT);
+}
+
+static ArrayType *
+extractallgroups_common(text *haystack_va, text *pattern, bool vertical, bool as_bytea)
+{
+	re2_pattern *pat = compile_arg(pattern);
+	const char	*hdata = VARDATA_ANY(haystack_va);
+	size_t		 hlen = VARSIZE_ANY_EXHDR(haystack_va);
+	char		 errbuf[RE2_ERRBUF_SIZE];
+	int			 matches;
+	int			 ngroups;
+	re2_span	*spans;
+
+	errbuf[0] = '\0';
+	spans = re2_extract_all_groups(pat, hdata, hlen, &matches, &ngroups, errbuf, sizeof(errbuf));
+
+	if (errbuf[0] != '\0')
+		ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf)));
+
+	if (!spans || matches == 0)
+		return construct_empty_array(as_bytea ? BYTEAOID : TEXTOID);
+
+	return build_groups_2d(spans, matches, ngroups, vertical, as_bytea ? span_to_bytea : span_to_text,
+						   as_bytea ? BYTEAOID : TEXTOID);
+}
+
+PG_FUNCTION_INFO_V1(pgre2_extractallgroupshorizontal);
+Datum
+pgre2_extractallgroupshorizontal(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(PG_GETARG_TEXT_PP(0), PG_GETARG_TEXT_PP(1), false, false));
+}
+
+PG_FUNCTION_INFO_V1(pgre2_extractallgroupsvertical);
+Datum
+pgre2_extractallgroupsvertical(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(PG_GETARG_TEXT_PP(0), PG_GETARG_TEXT_PP(1), true, false));
+}
+
+/*
+ * Escape regex metacharacters per ClickHouse semantics:
+ * \0 \\ | ( ) ^ $ . [ ] ? * + { : -
+ * (Slightly differs from re2::RE2::QuoteMeta which uses \xNN for control bytes.)
+ * Source: ClickHouse/src/Functions/regexpQuoteMeta.cpp
+ */
+static void *
+quotemeta_impl(const char *src, size_t slen)
+{
+	void  *out = palloc(2 * slen + VARHDRSZ);
+	char  *dst = VARDATA(out);
+	size_t dlen = 0;
+
+	for (size_t i = 0; i < slen; i++)
+	{
+		char c = src[i];
+
+		switch (c)
+		{
+			case '\0':
+			case '\\':
+			case '|':
+			case '(':
+			case ')':
+			case '^':
+			case '$':
+			case '.':
+			case '[':
+			case ']':
+			case '?':
+			case '*':
+			case '+':
+			case '{':
+			case ':':
+			case '-':
+				dst[dlen++] = '\\';
+				break;
+			default:
+				break;
+		}
+		dst[dlen++] = c;
+	}
+	SET_VARSIZE(out, dlen + VARHDRSZ);
+	return out;
+}
+
+PG_FUNCTION_INFO_V1(pgre2_regexpquotemeta);
+Datum
+pgre2_regexpquotemeta(PG_FUNCTION_ARGS)
+{
+	text *input = PG_GETARG_TEXT_PP(0);
+
+	PG_RETURN_TEXT_P(quotemeta_impl(VARDATA_ANY(input), VARSIZE_ANY_EXHDR(input)));
+}
+
+/* splitByRegexp empty-pattern path: each input byte becomes its own element. */
+static ArrayType *
+split_chars(const char *hdata, size_t hlen, int max_splits, bool as_bytea)
+{
+	int		   n = (max_splits > 0 && (size_t)max_splits < hlen) ? max_splits : (int)hlen;
+	Datum	  *elems;
+	ArrayType *arr;
+
+	if (n == 0)
+		return construct_empty_array(as_bytea ? BYTEAOID : TEXTOID);
+
+	elems = (Datum *)palloc(n * sizeof(Datum));
+	for (int i = 0; i < n; i++)
+	{
+		re2_span s = { hdata + i, 1 };
+
+		elems[i] = as_bytea ? span_to_bytea(s) : span_to_text(s);
+	}
+
+	arr = construct_array(elems, n, as_bytea ? BYTEAOID : TEXTOID, -1, false, TYPALIGN_INT);
+	return arr;
+}
+
+/*
+ * splitByRegexp(haystack, pattern, max_splits=0). Empty pattern splits per byte;
+ * otherwise re2_split emits substrings between matches. max_splits 0 = unlimited.
+ */
+static ArrayType *
+splitbyregexp_common(text *haystack_va, text *pattern, int max_splits, bool as_bytea)
+{
+	const char *hdata = VARDATA_ANY(haystack_va);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack_va);
+	size_t		plen = VARSIZE_ANY_EXHDR(pattern);
+
+	if (plen == 0)
+		return split_chars(hdata, hlen, max_splits, as_bytea);
+
+	{
+		re2_pattern *pat = compile_arg(pattern);
+		char		 errbuf[RE2_ERRBUF_SIZE];
+		int			 count;
+		re2_span	*spans;
+		Datum		*elems;
+		ArrayType	*arr;
+
+		errbuf[0] = '\0';
+		spans = re2_split(pat, hdata, hlen, max_splits, &count, errbuf, sizeof(errbuf));
+		if (errbuf[0] != '\0')
+			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf)));
+
+		if (!spans || count == 0)
+			return construct_empty_array(as_bytea ? BYTEAOID : TEXTOID);
+
+		elems = (Datum *)palloc(count * sizeof(Datum));
+		for (int i = 0; i < count; i++)
+			elems[i] = as_bytea ? span_to_bytea(spans[i]) : span_to_text(spans[i]);
+
+		arr = construct_array(elems, count, as_bytea ? BYTEAOID : TEXTOID, -1, false, TYPALIGN_INT);
+		return arr;
+	}
+}
+
+PG_FUNCTION_INFO_V1(pgre2_splitbyregexp);
+Datum
+pgre2_splitbyregexp(PG_FUNCTION_ARGS)
+{
+	int max_splits = PG_NARGS() >= 3 && !PG_ARGISNULL(2) ? PG_GETARG_INT32(2) : 0;
+
+	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common(PG_GETARG_TEXT_PP(0), PG_GETARG_TEXT_PP(1), max_splits, false));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_replaceregexpone);
@@ -336,7 +539,7 @@ pgre2_extract_bytea(PG_FUNCTION_ARGS)
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
 
-	PG_RETURN_BYTEA_P(span_to_bytea(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
+	PG_RETURN_DATUM(span_to_bytea(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_extractall_bytea);
@@ -362,7 +565,7 @@ pgre2_extractall_bytea(PG_FUNCTION_ARGS)
 
 	elems = (Datum *)palloc(count * sizeof(Datum));
 	for (int i = 0; i < count; i++)
-		elems[i] = PointerGetDatum(span_to_bytea(spans[i]));
+		elems[i] = span_to_bytea(spans[i]);
 
 	arr = construct_array(elems, count, BYTEAOID, -1, false, TYPALIGN_INT);
 	PG_RETURN_ARRAYTYPE_P(arr);
@@ -383,7 +586,7 @@ pgre2_regexpextract_bytea(PG_FUNCTION_ARGS)
 	if (errbuf[0] != '\0')
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
 
-	PG_RETURN_BYTEA_P(span_to_bytea(s));
+	PG_RETURN_DATUM(span_to_bytea(s));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_extractgroups_bytea);
@@ -412,10 +615,42 @@ pgre2_extractgroups_bytea(PG_FUNCTION_ARGS)
 
 	elems = (Datum *)palloc(count * sizeof(Datum));
 	for (int i = 0; i < count; i++)
-		elems[i] = PointerGetDatum(span_to_bytea(spans[i]));
+		elems[i] = span_to_bytea(spans[i]);
 
 	arr = construct_array(elems, count, BYTEAOID, -1, false, TYPALIGN_INT);
 	PG_RETURN_ARRAYTYPE_P(arr);
+}
+
+PG_FUNCTION_INFO_V1(pgre2_extractallgroupshorizontal_bytea);
+Datum
+pgre2_extractallgroupshorizontal_bytea(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common((text *)PG_GETARG_BYTEA_PP(0), PG_GETARG_TEXT_PP(1), false, true));
+}
+
+PG_FUNCTION_INFO_V1(pgre2_extractallgroupsvertical_bytea);
+Datum
+pgre2_extractallgroupsvertical_bytea(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common((text *)PG_GETARG_BYTEA_PP(0), PG_GETARG_TEXT_PP(1), true, true));
+}
+
+PG_FUNCTION_INFO_V1(pgre2_regexpquotemeta_bytea);
+Datum
+pgre2_regexpquotemeta_bytea(PG_FUNCTION_ARGS)
+{
+	bytea *input = PG_GETARG_BYTEA_PP(0);
+
+	PG_RETURN_BYTEA_P(quotemeta_impl(VARDATA_ANY(input), VARSIZE_ANY_EXHDR(input)));
+}
+
+PG_FUNCTION_INFO_V1(pgre2_splitbyregexp_bytea);
+Datum
+pgre2_splitbyregexp_bytea(PG_FUNCTION_ARGS)
+{
+	int max_splits = PG_NARGS() >= 3 && !PG_ARGISNULL(2) ? PG_GETARG_INT32(2) : 0;
+
+	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common((text *)PG_GETARG_BYTEA_PP(0), PG_GETARG_TEXT_PP(1), max_splits, true));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_replaceregexpone_bytea);
