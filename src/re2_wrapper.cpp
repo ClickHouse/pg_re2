@@ -229,6 +229,130 @@ re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, in
 	return out;
 }
 
+re2_span *
+re2_extract_all_groups(const re2_pattern *pat, const char *text, size_t text_len, int *match_count, int *ngroups_out,
+					   char *errbuf, size_t errbuf_size)
+{
+	int ngroups = pat->re.NumberOfCapturingGroups();
+
+	*match_count = 0;
+	*ngroups_out = ngroups;
+
+	if (ngroups == 0)
+	{
+		snprintf(errbuf, errbuf_size, "pattern has no capturing groups");
+		return NULL;
+	}
+
+	errbuf[0] = '\0';
+
+	re2::StringPiece			  input(text, text_len);
+	std::vector<re2_span>		  spans;
+	std::vector<re2::StringPiece> sub(ngroups + 1);
+	size_t						  pos = 0;
+
+	try
+	{
+		while (pos <= text_len)
+		{
+			if (!pat->re.Match(input, pos, text_len, re2::RE2::UNANCHORED, sub.data(), ngroups + 1))
+				break;
+
+			for (int g = 1; g <= ngroups; g++)
+			{
+				re2::StringPiece &sp = sub[g];
+				re2_span		  s;
+				s.data = sp.data();
+				s.len = sp.data() ? sp.size() : 0;
+				spans.push_back(s);
+			}
+
+			size_t match_end = (sub[0].data() - text) + sub[0].size();
+			pos = match_end > pos ? match_end : pos + 1;
+		}
+	}
+	catch (std::bad_alloc &)
+	{
+		snprintf(errbuf, errbuf_size, "out of memory");
+		return NULL;
+	}
+
+	if (spans.empty())
+		return NULL;
+
+	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	if (!out)
+	{
+		snprintf(errbuf, errbuf_size, "out of memory");
+		return NULL;
+	}
+	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
+	*match_count = (int)(spans.size() / ngroups);
+	return out;
+}
+
+re2_span *
+re2_split(const re2_pattern *pat, const char *text, size_t text_len, int max_splits, int *count, char *errbuf,
+		  size_t errbuf_size)
+{
+	std::vector<re2_span> spans;
+
+	errbuf[0] = '\0';
+	*count = 0;
+
+	try
+	{
+		re2::StringPiece input(text, text_len);
+		size_t			 pos = 0;
+		int				 splits = 0;
+		bool			 done = false;
+
+		while (!done)
+		{
+			if (max_splits > 0 && splits >= max_splits)
+				break;
+
+			re2::StringPiece m;
+			if (!pat->re.Match(input, pos, text_len, re2::RE2::UNANCHORED, &m, 1) || m.size() == 0)
+			{
+				re2_span s;
+				s.data = text + pos;
+				s.len = text_len - pos;
+				spans.push_back(s);
+				done = true;
+			}
+			else
+			{
+				size_t	 match_start = m.data() - text;
+				re2_span s;
+				s.data = text + pos;
+				s.len = match_start - pos;
+				spans.push_back(s);
+				pos = match_start + m.size();
+				splits++;
+			}
+		}
+	}
+	catch (std::bad_alloc &)
+	{
+		snprintf(errbuf, errbuf_size, "out of memory");
+		return NULL;
+	}
+
+	if (spans.empty())
+		return NULL;
+
+	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	if (!out)
+	{
+		snprintf(errbuf, errbuf_size, "out of memory");
+		return NULL;
+	}
+	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
+	*count = (int)spans.size();
+	return out;
+}
+
 static bool
 validate_rewrite(const re2_pattern *pat, const char *repl, size_t repl_len, char *errbuf, size_t errbuf_size)
 {

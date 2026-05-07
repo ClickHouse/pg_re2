@@ -39,11 +39,9 @@ SELECT re2regexpextract(NULL, '(\d+)', 1) IS NULL AS re_null1;
 SELECT re2regexpextract('100', NULL, 1) IS NULL AS re_null2;
 
 -- regexpextract errors
-\set ON_ERROR_STOP off
 SELECT re2regexpextract('100-200', '(\d+)-(\d+)', 3);   -- out of range
 SELECT re2regexpextract('100-200', '(\d+)-(\d+)', -1);  -- negative
 SELECT re2regexpextract('100-200', '\d+-\d+', 1);       -- no groups + index 1
-\set ON_ERROR_STOP on
 
 -- extractgroups
 SELECT re2extractgroups('hello world', '(\w+) (\w+)');
@@ -52,9 +50,46 @@ SELECT re2extractgroups('no match', '(\d{4})-(\d{2})-(\d{2})');  -- no match: em
 SELECT re2extractgroups(NULL, '(\d+)') IS NULL AS eg_null;
 
 -- extractgroups errors
-\set ON_ERROR_STOP off
 SELECT re2extractgroups('hello', '\w+');  -- no capture groups
-\set ON_ERROR_STOP on
+
+-- extractallgroupsvertical / horizontal
+SELECT re2extractallgroupsvertical('abc=111, def=222, ghi=333', '("[^"]+"|\w+)=("[^"]+"|\w+)');
+SELECT re2extractallgroupshorizontal('abc=111, def=222, ghi=333', '("[^"]+"|\w+)=("[^"]+"|\w+)');
+SELECT re2extractallgroupsvertical('2024-01-15 2025-06-30', '(\d{4})-(\d{2})-(\d{2})');
+SELECT re2extractallgroupshorizontal('2024-01-15 2025-06-30', '(\d{4})-(\d{2})-(\d{2})');
+SELECT re2extractallgroupsvertical('no match', '(\d+)');                 -- empty array
+SELECT re2extractallgroupshorizontal('no match', '(\d+)');               -- empty array
+SELECT re2extractallgroupsvertical(NULL, '(\d+)') IS NULL AS eav_null;
+SELECT re2extractallgroupshorizontal(NULL, '(\d+)') IS NULL AS eah_null;
+
+-- extractallgroups errors
+SELECT re2extractallgroupsvertical('hello', '\w+');     -- no capture groups
+SELECT re2extractallgroupshorizontal('hello', '\w+');   -- no capture groups
+
+-- regexpquotemeta
+SELECT re2regexpquotemeta('Hello. [World]? (Yes)*');
+SELECT re2regexpquotemeta('a+b*c?');
+SELECT re2regexpquotemeta('plain text');                                 -- no metas
+SELECT re2regexpquotemeta('');                                           -- empty
+SELECT re2regexpquotemeta('a-b:c{d}|e^f$g\h');
+-- escaped pattern roundtrips: re2match(s, re2regexpquotemeta(s)) is true
+SELECT re2match('1+1=2', re2regexpquotemeta('1+1'));
+SELECT re2regexpquotemeta(NULL) IS NULL AS rqm_null;
+
+-- splitbyregexp
+SELECT re2splitbyregexp('a12bc23de345f', '\d+');                         -- digit splitter
+SELECT re2splitbyregexp('abcde', '');                                    -- empty pattern: per char
+SELECT re2splitbyregexp('a,b,c', ',');                                   -- char delimiter
+SELECT re2splitbyregexp(',a,b,', ',');                                   -- leading/trailing splits
+SELECT re2splitbyregexp('abc', ',');                                     -- no match: whole string
+SELECT re2splitbyregexp('', ',');                                        -- empty haystack
+SELECT re2splitbyregexp('', '');                                         -- both empty
+SELECT re2splitbyregexp('a,b,c,d', ',', 2);                              -- max_substrings cap
+SELECT re2splitbyregexp('a,b,c,d', ',', 0);                              -- 0 = unlimited
+SELECT re2splitbyregexp('abcdef', '', 3);                                -- empty pat + cap
+-- CH: zero-length match (e.g. 'a*') treated as no-match
+SELECT re2splitbyregexp('foo', 'x*');
+SELECT re2splitbyregexp(NULL, ',') IS NULL AS spr_null;
 
 -- replaceregexpone
 SELECT re2replaceregexpone('Hello', 'l', 'x');                                -- first only
@@ -69,9 +104,7 @@ SELECT re2replaceregexpone(',,1', '^[,]*|[,]*$', '');
 SELECT re2replaceregexpone(NULL, '\d+', 'x') IS NULL AS rp1_null;
 
 -- replaceregexpone error: invalid backref
-\set ON_ERROR_STOP off
 SELECT re2replaceregexpone('Hello', 'l', '\1');  -- \1: backref beyond 0 group(s)
-\set ON_ERROR_STOP on
 
 -- replaceregexpall
 SELECT re2replaceregexpall('Hello', 'l', 'x');                       -- all occurrences
@@ -129,9 +162,7 @@ SELECT re2multimatchallindices('hello world', 'hello', '\d+', 'world', 'o');
 SELECT re2multimatchallindices('test', '\d+', '[A-Z]+');
 
 -- invalid pattern
-\set ON_ERROR_STOP off
 SELECT re2match('hello', '[invalid');
-\set ON_ERROR_STOP on
 
 -- ==== bytea overloads (zero-byte handling, CH tests 01083/01085) ====
 
@@ -162,3 +193,13 @@ SELECT re2countmatches('a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::byte
 
 -- multimatchany with \0 haystack
 SELECT re2multimatchany('a'::bytea || '\x00'::bytea || 'key="v"'::bytea, 'key', 'nope');
+
+-- extractallgroups with \0
+SELECT re2extractallgroupsvertical('a'::bytea || '\x00'::bytea || 'k1=v1 k2=v2'::bytea, '(\w+)=(\w+)');
+SELECT re2extractallgroupshorizontal('a'::bytea || '\x00'::bytea || 'k1=v1 k2=v2'::bytea, '(\w+)=(\w+)');
+
+-- regexpquotemeta with \0
+SELECT re2regexpquotemeta('a'::bytea || '\x00'::bytea || '.b'::bytea);
+
+-- splitbyregexp with \0
+SELECT re2splitbyregexp('a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::bytea || 'c'::bytea, '\x00');

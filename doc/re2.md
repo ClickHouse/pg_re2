@@ -1,4 +1,4 @@
-re2 0.1.2
+re2 0.2.0
 =========
 
 ## Synopsis
@@ -157,6 +157,112 @@ number of capturing groups in regexp). If there is no matching group, it
 returns an empty array.
 
 **ClickHouse equivalent: [extractGroups](https://clickhouse.com/docs/sql-reference/functions/string-search-functions#extractGroups)**
+
+### `re2extractallgroupsvertical()` ###
+
+Matches all non-overlapping occurrences of `:pattern` and returns a 2D array
+where each inner array contains the capturing groups for one match.
+
+**Syntax**
+
+```sql
+SELECT re2extractallgroupsvertical( :haystack, :pattern );
+```
+
+**Parameters**
+
+`:haystack`
+: Input string to extract from. `TEXT` or `BYTEA`
+
+`:pattern`
+: Regular expression with at least one capturing group. `TEXT`
+
+**Returns `text[][]` or `bytea[][]`**
+
+Two-dimensional array of capturing groups, one row per match. If no matches
+are found, returns an empty array.
+
+**ClickHouse equivalent: [extractAllGroupsVertical](https://clickhouse.com/docs/sql-reference/functions/string-search-functions#extractAllGroupsVertical)**
+
+### `re2extractallgroupshorizontal()` ###
+
+Matches all non-overlapping occurrences of `:pattern` and returns a 2D array
+where each inner array contains all matches for one capturing group.
+
+**Syntax**
+
+```sql
+SELECT re2extractallgroupshorizontal( :haystack, :pattern );
+```
+
+**Parameters**
+
+`:haystack`
+: Input string to extract from. `TEXT` or `BYTEA`
+
+`:pattern`
+: Regular expression with at least one capturing group. `TEXT`
+
+**Returns `text[][]` or `bytea[][]`**
+
+Two-dimensional array of matches, one row per capturing group. If no matches
+are found, returns an empty array (ClickHouse returns an array of empty
+arrays, one per group; PostgreSQL cannot represent that shape, so empty
+collapses to a flat empty array).
+
+**ClickHouse equivalent: [extractAllGroupsHorizontal](https://clickhouse.com/docs/sql-reference/functions/string-search-functions#extractAllGroupsHorizontal)**
+
+### `re2regexpquotemeta()` ###
+
+Escapes regex metacharacters with a backslash. Escaped characters: `\0`, `\\`,
+`|`, `(`, `)`, `^`, `$`, `.`, `[`, `]`, `?`, `*`, `+`, `{`, `:`, `-`.
+
+**Syntax**
+
+```sql
+SELECT re2regexpquotemeta( :input );
+```
+
+**Parameters**
+
+`:input`
+: String to escape. `TEXT` or `BYTEA`
+
+**Returns `TEXT` or `BYTEA`** matching input type.
+
+**ClickHouse equivalent: [regexpQuoteMeta](https://clickhouse.com/docs/sql-reference/functions/string-functions#regexpquotemeta)**
+
+### `re2splitbyregexp()` ###
+
+Splits `:haystack` into substrings using `:pattern` as a separator. If
+`:pattern` is empty, the haystack is split into individual characters. If
+`:max_substrings > 0`, returns at most that many substrings (extras are
+dropped).
+
+**Syntax**
+
+```sql
+SELECT re2splitbyregexp( :haystack, :pattern, :max_substrings DEFAULT 0 );
+```
+
+**Parameters**
+
+`:haystack`
+: Input string to split. `TEXT` or `BYTEA`
+
+`:pattern`
+: Regular expression separator. `TEXT`
+
+`:max_substrings`
+: Optional cap on the number of returned substrings. `0` means unlimited.
+  `INTEGER`
+
+**Returns `text[]` or `bytea[]`** matching haystack type. Note: argument order
+is `(haystack, pattern)` to match the pg_re2 convention; ClickHouse uses
+`splitByRegexp(pattern, haystack[, max_substrings])`. Zero-length matches are
+treated as no-match (matching ClickHouse behavior).
+
+**ClickHouse equivalent: [splitByRegexp](https://clickhouse.com/docs/sql-reference/functions/splitting-merging-functions#splitByRegexp)**
 
 ### `re2replaceregexpone()` ###
 

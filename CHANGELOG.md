@@ -7,11 +7,21 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
-## [v0.1.2] — Unreleased
+## [v0.2.0] — Unreleased
 
-Fixed memory safety in C++ wrapper.
+### ⚡ Improvements
 
-  [v0.1.2]: https://github.com/clickhouse/pg_re2/compare/v0.1.1...v0.1.2
+*   Added `re2extractallgroupshorizontal`, `re2extractallgroupsvertical`,
+    `re2regexpquotemeta`, and `re2splitbyregexp` (CH-compatible). Each gets a
+    `bytea` overload alongside `text`.
+*   Fixed memory safety in C++ wrapper.
+
+### 📔 Notes
+
+*   Run `ALTER EXTENSION re2 UPDATE TO '0.2'` to expose the new functions on
+    existing databases.
+
+  [v0.2.0]: https://github.com/clickhouse/pg_re2/compare/v0.1.1...v0.2.0
 
 ## [v0.1.1] — 2026-04-16
 
