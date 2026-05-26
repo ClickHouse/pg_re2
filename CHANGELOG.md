@@ -7,6 +7,21 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
+## [v0.3.0] — 2026-05-26
+
+### 🐛 Fixes
+
+*   `re2splitbyregexp` argument order corrected to `(pattern, haystack[,
+    max_substrings])` matching ClickHouse's `splitByRegexp`. Previously
+    released as `(haystack, pattern)` in 0.2.0.
+
+### 📔 Notes
+
+*   Run `ALTER EXTENSION re2 UPDATE TO '0.3'` to apply the fix on existing
+    databases.
+
+  [v0.3.0]: https://github.com/clickhouse/pg_re2/compare/v0.2.0...v0.3.0
+
 ## [v0.2.0] — 2026-05-26
 
 ### ⚡ Improvements

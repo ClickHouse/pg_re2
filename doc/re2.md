@@ -1,4 +1,4 @@
-re2 0.2.0
+re2 0.3.0
 =========
 
 ## Synopsis
@@ -242,25 +242,23 @@ dropped).
 **Syntax**
 
 ```sql
-SELECT re2splitbyregexp( :haystack, :pattern, :max_substrings DEFAULT 0 );
+SELECT re2splitbyregexp( :pattern, :haystack, :max_substrings DEFAULT 0 );
 ```
 
 **Parameters**
 
-`:haystack`
-: Input string to split. `TEXT` or `BYTEA`
-
 `:pattern`
 : Regular expression separator. `TEXT`
+
+`:haystack`
+: Input string to split. `TEXT` or `BYTEA`
 
 `:max_substrings`
 : Optional cap on the number of returned substrings. `0` means unlimited.
   `INTEGER`
 
-**Returns `text[]` or `bytea[]`** matching haystack type. Note: argument order
-is `(haystack, pattern)` to match the pg_re2 convention; ClickHouse uses
-`splitByRegexp(pattern, haystack[, max_substrings])`. Zero-length matches are
-treated as no-match (matching ClickHouse behavior).
+**Returns `text[]` or `bytea[]`** matching haystack type. Zero-length matches
+are treated as no-match (matching ClickHouse behavior).
 
 **ClickHouse equivalent: [splitByRegexp](https://clickhouse.com/docs/sql-reference/functions/splitting-merging-functions#splitByRegexp)**
 
