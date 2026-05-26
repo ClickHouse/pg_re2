@@ -77,19 +77,19 @@ SELECT re2match('1+1=2', re2regexpquotemeta('1+1'));
 SELECT re2regexpquotemeta(NULL) IS NULL AS rqm_null;
 
 -- splitbyregexp
-SELECT re2splitbyregexp('a12bc23de345f', '\d+');                         -- digit splitter
-SELECT re2splitbyregexp('abcde', '');                                    -- empty pattern: per char
-SELECT re2splitbyregexp('a,b,c', ',');                                   -- char delimiter
-SELECT re2splitbyregexp(',a,b,', ',');                                   -- leading/trailing splits
-SELECT re2splitbyregexp('abc', ',');                                     -- no match: whole string
-SELECT re2splitbyregexp('', ',');                                        -- empty haystack
+SELECT re2splitbyregexp('\d+', 'a12bc23de345f');                         -- digit splitter
+SELECT re2splitbyregexp('', 'abcde');                                    -- empty pattern: per char
+SELECT re2splitbyregexp(',', 'a,b,c');                                   -- char delimiter
+SELECT re2splitbyregexp(',', ',a,b,');                                   -- leading/trailing splits
+SELECT re2splitbyregexp(',', 'abc');                                     -- no match: whole string
+SELECT re2splitbyregexp(',', '');                                        -- empty haystack
 SELECT re2splitbyregexp('', '');                                         -- both empty
-SELECT re2splitbyregexp('a,b,c,d', ',', 2);                              -- max_substrings cap
-SELECT re2splitbyregexp('a,b,c,d', ',', 0);                              -- 0 = unlimited
-SELECT re2splitbyregexp('abcdef', '', 3);                                -- empty pat + cap
+SELECT re2splitbyregexp(',', 'a,b,c,d', 2);                              -- max_substrings cap
+SELECT re2splitbyregexp(',', 'a,b,c,d', 0);                              -- 0 = unlimited
+SELECT re2splitbyregexp('', 'abcdef', 3);                                -- empty pat + cap
 -- CH: zero-length match (e.g. 'a*') treated as no-match
-SELECT re2splitbyregexp('foo', 'x*');
-SELECT re2splitbyregexp(NULL, ',') IS NULL AS spr_null;
+SELECT re2splitbyregexp('x*', 'foo');
+SELECT re2splitbyregexp(',', NULL) IS NULL AS spr_null;
 
 -- replaceregexpone
 SELECT re2replaceregexpone('Hello', 'l', 'x');                                -- first only
@@ -202,4 +202,4 @@ SELECT re2extractallgroupshorizontal('a'::bytea || '\x00'::bytea || 'k1=v1 k2=v2
 SELECT re2regexpquotemeta('a'::bytea || '\x00'::bytea || '.b'::bytea);
 
 -- splitbyregexp with \0
-SELECT re2splitbyregexp('a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::bytea || 'c'::bytea, '\x00');
+SELECT re2splitbyregexp('\x00', 'a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::bytea || 'c'::bytea);

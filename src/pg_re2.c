@@ -325,11 +325,11 @@ split_chars(const char *hdata, size_t hlen, int max_splits, bool as_bytea)
 }
 
 /*
- * splitByRegexp(haystack, pattern, max_splits=0). Empty pattern splits per byte;
+ * splitByRegexp(pattern, haystack, max_splits=0). Empty pattern splits per byte;
  * otherwise re2_split emits substrings between matches. max_splits 0 = unlimited.
  */
 static ArrayType *
-splitbyregexp_common(text *haystack_va, text *pattern, int max_splits, bool as_bytea)
+splitbyregexp_common(text *pattern, text *haystack_va, int max_splits, bool as_bytea)
 {
 	const char *hdata = VARDATA_ANY(haystack_va);
 	size_t		hlen = VARSIZE_ANY_EXHDR(haystack_va);
@@ -650,7 +650,7 @@ pgre2_splitbyregexp_bytea(PG_FUNCTION_ARGS)
 {
 	int max_splits = PG_NARGS() >= 3 && !PG_ARGISNULL(2) ? PG_GETARG_INT32(2) : 0;
 
-	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common((text *)PG_GETARG_BYTEA_PP(0), PG_GETARG_TEXT_PP(1), max_splits, true));
+	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common(PG_GETARG_TEXT_PP(0), (text *)PG_GETARG_BYTEA_PP(1), max_splits, true));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_replaceregexpone_bytea);
