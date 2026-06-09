@@ -11,7 +11,7 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v6
       - name: Start Postgres
-        run: pg-start 18 libre2-dev
+        run: pg-start 19 libre2-dev
       - name: Bundle the Release
         id: bundle
         run: pgxn-bundle
