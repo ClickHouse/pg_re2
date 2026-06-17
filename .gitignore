@@ -5,6 +5,8 @@
 *.bc
 /re2-*
 /results/
+/benchmark/*.csv
+/benchmark/*.png
 regression.diffs
 regression.out
 .vscode/
