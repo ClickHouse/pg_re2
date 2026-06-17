@@ -40,6 +40,14 @@ lint: src/*.c src/*.h src/*.cpp
 lint22: src/*.c src/*.h src/*.cpp
 	clang-format-22 --dry-run --Werror $^
 
+.PHONY: bench # Run re2 vs builtin regex benchmark (libpq env vars select target DB)
+bench:
+	bash benchmark/run_bench.sh $(or $(ITERATIONS),100)
+
+.PHONY: bench-graphs
+bench-graphs:
+	python3 benchmark/gen_graph.py
+
 # Build a PGXN distribution bundle.
 dist: $(EXTENSION)-$(DISTVERSION).zip
 
