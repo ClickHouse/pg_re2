@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate benchmark speedup graph from results.csv"""
+"""Generate benchmark graph from results.csv"""
 import csv
 import math
 import os
@@ -184,7 +184,7 @@ def _save_png(path, width, height, pixels):
         f.write(png)
 
 
-def plot_speedup(tests, filename='speedup.png'):
+def plot_speedup(tests, filename='graph.png'):
     """Render horizontal speedup bars"""
     rows = _rows_by_speedup(tests)
     path = os.path.join(OUT_DIR, filename)

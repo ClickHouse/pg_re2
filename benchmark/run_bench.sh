@@ -4,11 +4,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ITERATIONS="${1:-100}"
+ITERATIONS="${1:-5}"
 OUTFILE="$SCRIPT_DIR/results.csv"
 PSQL="${PSQL:-psql}"
 
 echo "category,test_name,engine,rows,time_ms,iteration" > "$OUTFILE"
+
+# Build data once; iterations measure regex only
+echo "=== Building benchmark data ===" >&2
+"$PSQL" -X -q -f "$SCRIPT_DIR/setup.sql" >&2
 
 for i in $(seq 1 "$ITERATIONS"); do
     echo "=== Iteration $i/$ITERATIONS ===" >&2
@@ -19,6 +23,8 @@ for i in $(seq 1 "$ITERATIONS"); do
         esac
     done >> "$OUTFILE"
 done
+
+"$PSQL" -X -q -f "$SCRIPT_DIR/teardown.sql" >&2
 
 echo "Results written to $OUTFILE" >&2
 column -t -s',' "$OUTFILE" >&2

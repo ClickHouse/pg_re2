@@ -9,7 +9,7 @@ jobs:
     container: pgxn/pgxn-tools
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Start Postgres
         run: pg-start 19 libre2-dev
       - name: Bundle the Release
