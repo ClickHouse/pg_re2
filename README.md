@@ -1,11 +1,7 @@
-pg_re2 Postgres Extension
-=========================
-
 [![PGXN version](https://badge.fury.io/pg/re2.svg)](https://badge.fury.io/pg/re2)
 [![Build Status](https://github.com/ClickHouse/pg_re2/actions/workflows/ci.yml/badge.svg)](https://github.com/ClickHouse/pg_re2/actions/workflows/ci.yml)
 
-This library contains a single PostgreSQL extension, `re2`, which provides
-[ClickHouse]-compatible [regular expression functions] powered by [re2]:
+`re2` provides [ClickHouse] [regular expression functions] with [re2]
 
 ``` psql
 try=# create extension re2;
@@ -18,10 +14,12 @@ try=# SELECT re2match('hello world', 'h.*o');
 (1 row)
 ```
 
+[![Benchmark](benchmark/graph.png)](benchmark/README.md)
+
 Building
 --------
 
-To build pg_re2, install the [re2] library then just do this:
+Install [re2], then:
 
 ``` sh
 make
@@ -59,7 +57,7 @@ to find it:
 env PG_CONFIG=/path/to/pg_config make && make installcheck && make install
 ```
 
-If you counter an error such as:
+If you encounter an error such as:
 
 ```
 src/re2_wrapper.cpp:14:10: fatal error: 're2/re2.h' file not found
@@ -112,8 +110,7 @@ database as a super user and running:
 CREATE EXTENSION re2;
 ```
 
-If you want to install re2 and all of its supporting objects into a specific
-schema, use the `SCHEMA` clause to specify the schema, like so:
+To install into a specific schema, use the `SCHEMA` clause:
 
 ``` sql
 CREATE SCHEMA env;
@@ -123,32 +120,7 @@ CREATE EXTENSION re2 SCHEMA env;
 Dependencies
 ------------
 
-The `re2` extension requires PostgreSQL 16 or higher, [re2], and the C
-standard library, `<stdlib.h>`.
-
-Copyright and License
----------------------
-
-Copyright (c) 2026 ClickHouse
-
-This module is free software; you can redistribute it and/or modify it under
-the [PostgreSQL License](http://www.opensource.org/licenses/postgresql).
-
-Permission to use, copy, modify, and distribute this software and its
-documentation for any purpose, without fee, and without a written agreement is
-hereby granted, provided that the above copyright notice and this paragraph
-and the following two paragraphs appear in all copies.
-
-In no event shall ClickHouse be liable to any party for direct, indirect,
-special, incidental, or consequential damages, including lost profits, arising
-out of the use of this software and its documentation, even if ClickHouse has
-been advised of the possibility of such damage.
-
-ClickHouse specifically disclaim any warranties, including, but not limited
-to, the implied warranties of merchantability and fitness for a particular
-purpose. The software provided hereunder is on an "as is" basis, and
-ClickHouse have no obligations to provide maintenance, support, updates,
-enhancements, or modifications.
+`re2` extension requires PostgreSQL 13 or higher, & [re2].
 
   [ClickHouse]: https://clickhouse.com/clickhouse "ClickHouse: The fastest open-source analytical database"
   [re2]: https://github.com/google/re2 "RE2, a regular expression library"

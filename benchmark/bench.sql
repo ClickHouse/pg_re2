@@ -11,30 +11,7 @@
 SET jit = off;
 SET max_parallel_workers_per_gather = 0;
 
-CREATE EXTENSION IF NOT EXISTS re2;
-
--- Generate test data
-DROP TABLE IF EXISTS bench_data;
-CREATE TABLE bench_data AS
-SELECT
-  id,
-  -- emails (~40 chars)
-  'user' || (id % 10000)::text || '@example' || (id % 100)::text || '.com' AS email,
-  -- log lines (~200 chars)
-  repeat(chr(65 + (id % 26)), 20) || ' error_code=' || (id % 999)::text
-    || ' path=/api/v' || (id % 5)::text || '/users/' || id::text
-    || ' ip=192.168.' || (id % 256)::text || '.' || (id % 256)::text
-    || ' ' || repeat(chr(97 + (id % 26)), 100) AS logline,
-  -- long text (~2000 chars)
-  repeat('the quick brown fox jumps over the lazy dog 12345 ', 40) AS longtext
-FROM generate_series(1, 500000) AS id;
-
-ANALYZE bench_data;
-
--- Warmup
-SELECT count(*) FROM bench_data WHERE email IS NOT NULL;
-SELECT count(*) FROM bench_data WHERE logline IS NOT NULL;
-SELECT count(*) FROM bench_data WHERE longtext IS NOT NULL;
+-- Data built once by setup.sql; this file measures regex only
 
 -- ============================================================
 -- 1. MATCH: re2match() vs regexp_like()
@@ -173,16 +150,16 @@ FROM (SELECT clock_timestamp() AS ts) t;
 -- 3c/3d expand matches to rows (regexp_matches set-returning paradigm)
 -- ============================================================
 
--- 3a. All words from longtext (100k rows)
+-- 3a. All words from longtext (2.5k rows, ~1M matches)
 SELECT 'extract_all', 'all_words', 're2',
-  (SELECT sum(array_length(re2extractall(longtext, '\w+'), 1)) FROM bench_data WHERE id <= 100000),
+  (SELECT sum(array_length(re2extractall(longtext, '\w+'), 1)) FROM bench_data WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
 SELECT 'extract_all', 'all_words', 'pg_builtin',
   (SELECT sum(array_length(arr, 1)) FROM bench_data
      CROSS JOIN LATERAL (SELECT array_agg(m[1]) AS arr FROM regexp_matches(longtext, '\w+', 'g') m) s
-     WHERE id <= 100000),
+     WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
@@ -200,12 +177,12 @@ FROM (SELECT clock_timestamp() AS ts) t;
 
 -- 3c. All words via unnest (apples-to-apples with regexp_matches set-returning)
 SELECT 'extract_all_unnest', 'all_words', 're2',
-  (SELECT count(*) FROM bench_data, unnest(re2extractall(longtext, '\w+')) WHERE id <= 100000),
+  (SELECT count(*) FROM bench_data, unnest(re2extractall(longtext, '\w+')) WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
 SELECT 'extract_all_unnest', 'all_words', 'pg_builtin',
-  (SELECT count(*) FROM bench_data, regexp_matches(longtext, '\w+', 'g') WHERE id <= 100000),
+  (SELECT count(*) FROM bench_data, regexp_matches(longtext, '\w+', 'g') WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
@@ -249,14 +226,14 @@ SELECT 'replace_all', 'all_digits', 'pg_builtin',
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
--- 5b. All whitespace in longtext (100k rows)
+-- 5b. All whitespace in longtext (2.5k rows)
 SELECT 'replace_all', 'all_whitespace', 're2',
-  (SELECT count(*) FROM bench_data WHERE id <= 100000 AND re2replaceregexpall(longtext, '\s+', ' ') IS NOT NULL),
+  (SELECT count(*) FROM bench_data WHERE id <= 2500 AND re2replaceregexpall(longtext, '\s+', ' ') IS NOT NULL),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
 SELECT 'replace_all', 'all_whitespace', 'pg_builtin',
-  (SELECT count(*) FROM bench_data WHERE id <= 100000 AND regexp_replace(longtext, '\s+', ' ', 'g') IS NOT NULL),
+  (SELECT count(*) FROM bench_data WHERE id <= 2500 AND regexp_replace(longtext, '\s+', ' ', 'g') IS NOT NULL),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
@@ -275,16 +252,13 @@ SELECT 'count_matches', 'digit_sequences', 'pg_builtin',
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
--- 6b. Words in longtext (100k rows)
+-- 6b. Words in longtext (2.5k rows, ~1M matches)
 SELECT 'count_matches', 'words_longtext', 're2',
-  (SELECT sum(re2countmatches(longtext, '\w+')) FROM bench_data WHERE id <= 100000),
+  (SELECT sum(re2countmatches(longtext, '\w+')) FROM bench_data WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
 
 SELECT 'count_matches', 'words_longtext', 'pg_builtin',
-  (SELECT sum(regexp_count(longtext, '\w+')) FROM bench_data WHERE id <= 100000),
+  (SELECT sum(regexp_count(longtext, '\w+')) FROM bench_data WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
-
--- Cleanup
-DROP TABLE IF EXISTS bench_data;
