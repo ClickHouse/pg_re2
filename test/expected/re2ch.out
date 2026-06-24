@@ -1,3 +1,10 @@
+-- utility
+SELECT re2_version() ~ '^\d+\.\d+\.\d+$';
+ ?column? 
+----------
+ t
+(1 row)
+
 -- match: basic
 SELECT re2match('hello world', 'h.*o');
  re2match 

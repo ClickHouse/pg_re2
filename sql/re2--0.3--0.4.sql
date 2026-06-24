@@ -1,0 +1,5 @@
+\echo Use "ALTER EXTENSION re2 UPDATE TO '0.4'" to load this file. \quit
+
+CREATE FUNCTION re2_version() RETURNS TEXT
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT;

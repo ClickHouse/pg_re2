@@ -68,6 +68,14 @@ compile_arg_icase(text *pattern)
 	return pat;
 }
 
+/* ---- utility function ---- */
+PG_FUNCTION_INFO_V1(re2_version);
+Datum
+re2_version(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TEXT_P(cstring_to_text(RE2_EXT_VERSION));
+}
+
 /* ---- text functions ---- */
 
 PG_FUNCTION_INFO_V1(pgre2_match);

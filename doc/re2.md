@@ -1,4 +1,4 @@
-re2 0.3.0
+re2 0.4.0
 =========
 
 ## Synopsis
@@ -433,7 +433,6 @@ Like multiMatchAny but returns the array of all indices that match the
 haystack in any order. Pass one or more patterns or an array of patterns
 prepended with `VARIADIC`.
 
-
 **Syntax**
 
 ```sql
@@ -456,6 +455,20 @@ Returns an empty array if no matches are found.
 
 **ClickHouse equivalent: [multiMatchAllIndices](https://clickhouse.com/docs/sql-reference/functions/string-search-functions#multiMatchAllIndices)**
 
+### `re2_version()` ###
+
+Returns the semantic version of the re2 extension library.
+
+**Syntax**
+
+```sql
+SELECT re2_version();
+```
+
+**Returns `TEXT`**
+
+The re2 library semantic version string.
+
 ## Versioning Policy
 
 The re2 extension adheres to [Semantic Versioning] for its public releases.
@@ -467,8 +480,9 @@ The re2 extension adheres to [Semantic Versioning] for its public releases.
 Once installed, PostgreSQL tracks two variations of the version:
 
 *   The library version (defined by `PG_MODULE_MAGIC` on PostgreSQL 18 and
-    higher) includes the full semantic version, visible in the output of the
-    Postgres [`pg_get_loaded_modules()`] function.
+    higher) includes the full semantic version, visible in the output of
+    [`re2_version()`](#re2_version) or the Postgres
+    [`pg_get_loaded_modules()`] function.
 *   The extension version (defined in the control file) includes only the
     major and minor versions, visible in the `pg_catalog.pg_extension` table,
     the output of the `pg_available_extension_versions()` function, and
