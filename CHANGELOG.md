@@ -7,6 +7,16 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
+## [v0.4.0] — Unreleased
+
+### ⚡ Improvements
+
+*   Added `re2_version()`, which returns the full semantic version. This is
+    the same value visible in `pg_get_loaded_modules()`, but available in
+    Postgres versions prior to 18, and without having to load re2 first.
+
+  [v0.4.0]: https://github.com/clickhouse/pg_re2/compare/v0.3.0...v0.4.0
+
 ## [v0.3.0] — 2026-05-26
 
 ### 🐛 Fixes
