@@ -7,10 +7,12 @@ DISTVERSION  = $(shell grep -m 1 '^[[:space:]]\{2\}"version":' META.json | \
 
 DATA         = $(wildcard sql/$(EXTENSION)--*.sql)
 MODULE_big   = $(EXTENSION)
-OBJS         = src/pg_re2.o src/re2_cache.o src/re2_wrapper.o
+OBJS         = src/pg_re2.o src/re2_cache.o src/re2_util.o src/re2_wrapper.o
 
 PG_CONFIG   ?= pg_config
-PG_CXXFLAGS  = -std=c++17
+PG_CFLAGS    = -flto
+PG_CXXFLAGS  = -std=c++17 -flto
+PG_LDFLAGS   = -flto
 SHLIB_LINK   = -lre2 -lstdc++
 
 TESTS        ?= $(wildcard test/sql/*.sql)
@@ -31,6 +33,10 @@ src/version.h: src/version.h.in
 .PHONY: format
 format: src/*.c src/*.h src/*.cpp
 	clang-format -i $^
+
+.PHONY: format22
+format22: src/*.c src/*.h src/*.cpp
+	clang-format-22 -i $^
 
 .PHONY: lint
 lint: src/*.c src/*.h src/*.cpp

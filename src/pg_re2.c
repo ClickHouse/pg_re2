@@ -6,6 +6,7 @@
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 
 #include "re2_cache.h"
 #include "version.h"
@@ -37,6 +38,55 @@ span_to_bytea(re2_span s)
 	if (len > 0)
 		memcpy(VARDATA(result), s.data, len);
 	return PointerGetDatum(result);
+}
+
+/*
+ * Build 1-D no-null text/bytea array from spans in a single palloc, writing
+ * each element inline once. Avoids the per-element varlena palloc and the
+ * second copy that construct_array incurs via a temporary Datum[]. NULL span ->
+ * empty element, matching span_to_text/span_to_bytea. Layout mirrors
+ * construct_md_array for elmlen -1, TYPALIGN_INT.
+ */
+static ArrayType *
+spans_to_array(re2_span *spans, int count, Oid elemoid)
+{
+	size_t	   nbytes = 0;
+	ArrayType *arr;
+	char	  *p;
+
+	if (count <= 0)
+		return construct_empty_array(elemoid);
+
+	for (int i = 0; i < count; i++)
+	{
+		size_t len = spans[i].data ? spans[i].len : 0;
+
+		nbytes = INTALIGN(nbytes + VARHDRSZ + len);
+	}
+	nbytes += ARR_OVERHEAD_NONULLS(1);
+	if (!AllocSizeIsValid(nbytes))
+		ereport(ERROR, (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+						errmsg("array size exceeds the maximum allowed (%zu)", (Size)MaxAllocSize)));
+
+	arr = (ArrayType *)palloc0(nbytes);
+	SET_VARSIZE(arr, nbytes);
+	arr->ndim = 1;
+	arr->dataoffset = 0;
+	arr->elemtype = elemoid;
+	ARR_DIMS(arr)[0] = count;
+	ARR_LBOUND(arr)[0] = 1;
+
+	p = ARR_DATA_PTR(arr);
+	for (int i = 0; i < count; i++)
+	{
+		size_t len = spans[i].data ? spans[i].len : 0;
+
+		SET_VARSIZE(p, VARHDRSZ + len);
+		if (len > 0)
+			memcpy(VARDATA(p), spans[i].data, len);
+		p += INTALIGN(VARHDRSZ + len);
+	}
+	return arr;
 }
 
 static re2_pattern *
@@ -106,8 +156,6 @@ pgre2_extractall(PG_FUNCTION_ARGS)
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
 	int			 count;
 	re2_span	*spans;
-	Datum		*elems;
-	ArrayType	*arr;
 
 	{
 		char errbuf[RE2_ERRBUF_SIZE];
@@ -119,12 +167,7 @@ pgre2_extractall(PG_FUNCTION_ARGS)
 			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf)));
 	}
 
-	elems = (Datum *)palloc(count * sizeof(Datum));
-	for (int i = 0; i < count; i++)
-		elems[i] = span_to_text(spans[i]);
-
-	arr = construct_array(elems, count, TEXTOID, -1, false, TYPALIGN_INT);
-	PG_RETURN_ARRAYTYPE_P(arr);
+	PG_RETURN_ARRAYTYPE_P(spans_to_array(spans, count, TEXTOID));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_regexpextract);
@@ -558,8 +601,6 @@ pgre2_extractall_bytea(PG_FUNCTION_ARGS)
 	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
 	int			 count;
 	re2_span	*spans;
-	Datum		*elems;
-	ArrayType	*arr;
 
 	{
 		char errbuf[RE2_ERRBUF_SIZE];
@@ -571,12 +612,7 @@ pgre2_extractall_bytea(PG_FUNCTION_ARGS)
 			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf)));
 	}
 
-	elems = (Datum *)palloc(count * sizeof(Datum));
-	for (int i = 0; i < count; i++)
-		elems[i] = span_to_bytea(spans[i]);
-
-	arr = construct_array(elems, count, BYTEAOID, -1, false, TYPALIGN_INT);
-	PG_RETURN_ARRAYTYPE_P(arr);
+	PG_RETURN_ARRAYTYPE_P(spans_to_array(spans, count, BYTEAOID));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_regexpextract_bytea);
