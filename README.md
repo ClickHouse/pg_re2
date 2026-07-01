@@ -75,6 +75,15 @@ make CPPFLAGS=-I/opt/homebrew/include \
 If you encounter an error such as:
 
 ```
+utils/pg_locale.h:24:10: fatal error: 'unicode/ucol.h' file not found
+```
+
+Install the ICU development headers Postgres was built against, e.g.
+`libicu-dev` on Debian and Ubuntu.
+
+If you encounter an error such as:
+
+```
 ERROR:  must be owner of database regression
 ```
 

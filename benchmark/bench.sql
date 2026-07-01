@@ -262,3 +262,60 @@ SELECT 'count_matches', 'words_longtext', 'pg_builtin',
   (SELECT sum(regexp_count(longtext, '\w+')) FROM bench_data WHERE id <= 2500),
   (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
 FROM (SELECT clock_timestamp() AS ts) t;
+
+-- ============================================================
+-- 7. INDEX SCAN: re2 index support vs postgres index scan
+--   idx_btree  re2match(col,'^lit') planner support -> text_pattern_ops range,
+--              vs postgres' own '~' prefix support on the same index
+--   idx_gin    col @~ pat (gin_re2_ops, RE2 FilteredRE2 atoms)
+--              vs col ~ pat (pg_trgm gin_trgm_ops)
+-- enable_seqscan off so both engines are measured on their index, not a scan
+-- ============================================================
+SET enable_seqscan = off;
+
+-- 7a. b-tree literal prefix (~11k rows in range, recheck cost visible)
+SELECT 'idx_btree', 'prefix_literal', 're2',
+  (SELECT count(*) FROM bench_index_data WHERE re2match(email, '^user5')),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+SELECT 'idx_btree', 'prefix_literal', 'pg_builtin',
+  (SELECT count(*) FROM bench_index_data WHERE email ~ '^user5'),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+-- 7b. b-tree literal prefix + bounded char-class tail (prefix still extractable)
+SELECT 'idx_btree', 'prefix_charclass', 're2',
+  (SELECT count(*) FROM bench_index_data WHERE re2match(email, '^user12[0-9]')),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+SELECT 'idx_btree', 'prefix_charclass', 'pg_builtin',
+  (SELECT count(*) FROM bench_index_data WHERE email ~ '^user12[0-9]'),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+-- 7c. GIN required literal atom (re2 keeps a tight candidate set; pg_trgm wins
+-- here because its per-candidate consistent check is far cheaper)
+SELECT 'idx_gin', 'literal', 're2',
+  (SELECT count(*) FROM bench_index_data WHERE logline @~ 'error_code=123'),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+SELECT 'idx_gin', 'literal', 'pg_builtin',
+  (SELECT count(*) FROM bench_index_data WHERE logline ~ 'error_code=123'),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+-- 7d. GIN alternation (atoms on each branch)
+SELECT 'idx_gin', 'alternation', 're2',
+  (SELECT count(*) FROM bench_index_data WHERE logline @~ 'error_code=(100|200|300)'),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+SELECT 'idx_gin', 'alternation', 'pg_builtin',
+  (SELECT count(*) FROM bench_index_data WHERE logline ~ 'error_code=(100|200|300)'),
+  (extract(epoch FROM clock_timestamp() - ts) * 1000)::numeric(12,2)
+FROM (SELECT clock_timestamp() AS ts) t;
+
+RESET enable_seqscan;

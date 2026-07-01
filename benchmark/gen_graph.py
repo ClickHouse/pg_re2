@@ -184,8 +184,10 @@ def _save_png(path, width, height, pixels):
         f.write(png)
 
 
-def plot_speedup(tests, filename='graph.png'):
-    """Render horizontal speedup bars"""
+def plot_speedup(tests, filename='graph.png',
+                 title='re2 speedup over postgresql builtin regex',
+                 axis_cap=None):
+    """Render horizontal speedup bars; axis_cap clips outliers to given max"""
     rows = _rows_by_speedup(tests)
     path = os.path.join(OUT_DIR, filename)
 
@@ -201,7 +203,10 @@ def plot_speedup(tests, filename='graph.png'):
     display_rows = list(reversed(rows))
     speedups = [r[3] for r in rows]
     max_speedup = max(speedups)
-    ticks = _tick_values(max_speedup * 1.05)
+    target = max_speedup * 1.05
+    if axis_cap:
+        target = min(target, axis_cap)
+    ticks = _tick_values(target)
     axis_max = max(ticks)
 
     label_width = max(_text_width(label, 2) for label, _, _, _ in rows)
@@ -224,7 +229,7 @@ def plot_speedup(tests, filename='graph.png'):
         height,
         24,
         24,
-        're2 speedup over postgresql builtin regex',
+        title,
         FG,
         3,
     )
@@ -251,8 +256,10 @@ def plot_speedup(tests, filename='graph.png'):
 
         value = f'{speedup:.1f}x'
         value_width = _text_width(value, 2)
-        value_color = BG if value_width + 16 <= bar_width else FG
-        _draw_text(pixels, width, height, left + 8, y + 2, value, value_color, 2)
+        if value_width + 16 <= bar_width:
+            _draw_text(pixels, width, height, left + 8, y + 2, value, BG, 2)
+        else:
+            _draw_text(pixels, width, height, left + bar_width + 6, y + 2, value, FG, 2)
 
     if 1 <= axis_max:
         x = left + plot_width / axis_max
@@ -276,8 +283,21 @@ def plot_speedup(tests, filename='graph.png'):
     print(f"Saved {path}")
 
 
+def _split_index(tests):
+    """Partition tests into (throughput, index) by category prefix"""
+    throughput = {}
+    index = {}
+    for key, engines in tests.items():
+        (index if key[0].startswith('idx_') else throughput)[key] = engines
+    return throughput, index
+
+
 if __name__ == '__main__':
     data = load_results()
     tests = build_comparison_data(data)
-    plot_speedup(tests)
+    throughput, index = _split_index(tests)
+    plot_speedup(throughput, 'graph.png')
+    if index:
+        plot_speedup(index, 'graph_index.png',
+                     're2 index scan speedup over postgresql', axis_cap=20)
     print("Done.")

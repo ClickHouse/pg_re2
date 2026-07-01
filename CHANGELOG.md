@@ -14,6 +14,22 @@ All notable changes to this project will be documented in this file. It uses the
 *   Added `re2_version()`, which returns the full semantic version. This is
     the same value visible in `pg_get_loaded_modules()`, but available in
     Postgres versions prior to 18, and without having to load re2 first.
+*   Index support.
+    *   `WHERE re2match(col, '^order_2025')` a pattern starting with `^` and a
+        fixed prefix now reads only matching range of an existing b-tree index.
+        See [Index Support](doc/re2.md#index-support).
+    *   Added `@~` match operator (same as `re2match`) and `gin_re2_ops`
+        operator class. `CREATE INDEX ... USING gin (col gin_re2_ops)` lets
+        `WHERE col @~ pattern` only visit rows containing required trigrams.
+    *   Row-count estimates for `re2match` and `@~` filters with a constant
+        pattern now come from testing the pattern against column statistics
+        instead of a fixed guess, so the planner picks better plans around
+        such filters.
+
+### 📔 Notes
+
+*   Run `ALTER EXTENSION re2 UPDATE TO '0.4'` to expose the new operator and
+    operator class on existing databases.
 
   [v0.4.0]: https://github.com/clickhouse/pg_re2/compare/v0.3.0...v0.4.0
 

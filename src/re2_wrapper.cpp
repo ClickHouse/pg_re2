@@ -12,7 +12,9 @@ extern "C"
 
 #include "re2_wrapper.h"
 
+#include <algorithm>
 #include <new>
+#include <re2/filtered_re2.h>
 #include <re2/re2.h>
 #include <string>
 #include <vector>
@@ -39,12 +41,12 @@ re2_compile(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf
 	auto *pat = new (std::nothrow) re2_pattern(opts, re2::StringPiece(pattern, pattern_len));
 	if (!pat)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 	if (!pat->re.ok())
 	{
-		snprintf(errbuf, errbuf_size, "%s", pat->re.error().c_str());
+		strlcpy(errbuf, pat->re.error().c_str(), errbuf_size);
 		delete pat;
 		return NULL;
 	}
@@ -142,7 +144,7 @@ re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *
 	}
 	catch (std::bad_alloc &)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 
@@ -152,7 +154,7 @@ re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *
 	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
 	if (!out)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
@@ -196,7 +198,7 @@ re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, in
 	int ngroups = pat->re.NumberOfCapturingGroups();
 	if (ngroups == 0)
 	{
-		snprintf(errbuf, errbuf_size, "pattern has no capturing groups");
+		strlcpy(errbuf, "pattern has no capturing groups", errbuf_size);
 		*count = 0;
 		return NULL;
 	}
@@ -214,7 +216,7 @@ re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, in
 	if (!out)
 	{
 		delete[] sub;
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		*count = 0;
 		return NULL;
 	}
@@ -240,7 +242,7 @@ re2_extract_all_groups(const re2_pattern *pat, const char *text, size_t text_len
 
 	if (ngroups == 0)
 	{
-		snprintf(errbuf, errbuf_size, "pattern has no capturing groups");
+		strlcpy(errbuf, "pattern has no capturing groups", errbuf_size);
 		return NULL;
 	}
 
@@ -273,7 +275,7 @@ re2_extract_all_groups(const re2_pattern *pat, const char *text, size_t text_len
 	}
 	catch (std::bad_alloc &)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 
@@ -283,7 +285,7 @@ re2_extract_all_groups(const re2_pattern *pat, const char *text, size_t text_len
 	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
 	if (!out)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
@@ -335,7 +337,7 @@ re2_split(const re2_pattern *pat, const char *text, size_t text_len, int max_spl
 	}
 	catch (std::bad_alloc &)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 
@@ -345,7 +347,7 @@ re2_split(const re2_pattern *pat, const char *text, size_t text_len, int max_spl
 	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
 	if (!out)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
@@ -405,12 +407,12 @@ re2_replace_one(const re2_pattern *pat, const char *text, size_t text_len, const
 		re2::RE2::Replace(&result, pat->re, re2::StringPiece(repl, repl_len));
 		void *out = make_varlena(result);
 		if (!out)
-			snprintf(errbuf, errbuf_size, "out of memory");
+			strlcpy(errbuf, "out of memory", errbuf_size);
 		return out;
 	}
 	catch (std::bad_alloc &)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 }
@@ -428,12 +430,12 @@ re2_replace_all(const re2_pattern *pat, const char *text, size_t text_len, const
 		re2::RE2::GlobalReplace(&result, pat->re, re2::StringPiece(repl, repl_len));
 		void *out = make_varlena(result);
 		if (!out)
-			snprintf(errbuf, errbuf_size, "out of memory");
+			strlcpy(errbuf, "out of memory", errbuf_size);
 		return out;
 	}
 	catch (std::bad_alloc &)
 	{
-		snprintf(errbuf, errbuf_size, "out of memory");
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
 }
@@ -456,4 +458,114 @@ re2_count_matches(const re2_pattern *pat, const char *text, size_t text_len)
 		pos = match_end > pos ? match_end : pos + 1;
 	}
 	return n;
+}
+
+bool
+re2_possible_prefix(const re2_pattern *pat, char *out, size_t outcap, size_t *outlen)
+{
+	*outlen = 0;
+	try
+	{
+		std::string mn, mx;
+
+		if (!pat->re.PossibleMatchRange(&mn, &mx, 64))
+			return false;
+
+		/* Longest common prefix of [min, max] bounds every string in the range. */
+		size_t lim = std::min(mn.size(), mx.size());
+		size_t n = 0;
+		while (n < lim && mn[n] == mx[n])
+			n++;
+		if (n == 0)
+			return false;
+		if (n > outcap)
+			n = outcap;
+		memcpy(out, mn.data(), n);
+		*outlen = n;
+		return true;
+	}
+	catch (std::bad_alloc &)
+	{
+		*outlen = 0;
+		return false;
+	}
+}
+
+struct re2_filter
+{
+	re2::FilteredRE2		 f;
+	std::vector<std::string> atoms;
+	std::vector<int>		 passes_in;	 /* re2_filter_passes scratch, reused */
+	std::vector<int>		 passes_out; /* re2_filter_passes scratch, reused */
+	re2_filter() : f(3) {}				 /* min_atom_len 3: every atom yields >= 1 trigram */
+};
+
+re2_filter *
+re2_filter_new(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size)
+{
+	re2_filter *rf = NULL; /* NULL if the constructor throws; delete NULL is safe */
+
+	try
+	{
+		int					id;
+		re2::RE2::ErrorCode ec;
+
+		rf = new re2_filter();
+		ec = rf->f.Add(re2::StringPiece(pattern, pattern_len), default_opts(), &id);
+		if (ec != re2::RE2::NoError)
+		{
+			strlcpy(errbuf, "invalid RE2 pattern", errbuf_size);
+			delete rf;
+			return NULL;
+		}
+
+		rf->f.Compile(&rf->atoms);
+		return rf;
+	}
+	catch (std::bad_alloc &)
+	{
+		strlcpy(errbuf, "out of memory", errbuf_size);
+		delete rf;
+		return NULL;
+	}
+}
+
+void
+re2_filter_free(re2_filter *f)
+{
+	delete f;
+}
+
+int
+re2_filter_num_atoms(const re2_filter *f)
+{
+	return (int)f->atoms.size();
+}
+
+re2_span
+re2_filter_atom(const re2_filter *f, int i)
+{
+	re2_span s;
+	s.data = f->atoms[i].data();
+	s.len = f->atoms[i].size();
+	return s;
+}
+
+bool
+re2_filter_passes(re2_filter *f, const int *present, int n_present)
+{
+	try
+	{
+		/* assign/clear keep capacity, so steady state does no allocation */
+		if (n_present == 0)
+			f->passes_in.clear();
+		else
+			f->passes_in.assign(present, present + n_present);
+		f->f.AllPotentials(f->passes_in, &f->passes_out);
+		return !f->passes_out.empty();
+	}
+	catch (std::bad_alloc &)
+	{
+		return true; /* cannot prune safely: keep candidate for recheck */
+	}
 }

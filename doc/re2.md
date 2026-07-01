@@ -13,6 +13,9 @@ This library contains a single PostgreSQL extension, `re2`, which provides
 [ClickHouse]-compatible [regular expression functions] powered by [re2]. It
 supports PostgreSQL 13 and higher.
 
+It also provides the `@~` operator for RE2 text matches that can use GIN
+indexes.
+
 To align with ClickHouse regular expression function behavior, this extension
 provides functions in which:
 
@@ -24,7 +27,7 @@ provides functions in which:
 
 ## Functions
 
-### `re2match()` ###
+### `re2match` ###
 
 Checks if a provided string matches the provided regular expression pattern.
 
@@ -468,6 +471,91 @@ SELECT re2_version();
 **Returns `TEXT`**
 
 The re2 library semantic version string.
+
+## Operators
+
+### `@~` ###
+
+Checks whether the left `TEXT` value matches the right `TEXT` RE2 pattern.
+
+**Syntax**
+
+```sql
+SELECT :haystack @~ :pattern;
+```
+
+**Parameters**
+
+`:haystack`
+: String in which the search is performed. `TEXT`
+
+`:pattern`
+: Regular expression pattern. `TEXT`
+
+**Returns `BOOL`**
+
+Returns `true` if the pattern matches, `false` otherwise. For `TEXT` inputs,
+`haystack @~ pattern` is equivalent to `re2match(haystack, pattern)`.
+
+`@~` is GIN-indexable through the `gin_re2_ops` operator class:
+
+```sql
+CREATE INDEX ON logs USING gin (msg gin_re2_ops);
+SELECT * FROM logs WHERE msg @~ 'connection (refused|timed out)';
+```
+
+`@~` and `re2match(text, text)` match identically, produce the same row
+estimates, and both use the b-tree ranges below. Only `@~` can use a GIN
+index, since Postgres ties GIN operator classes to operators, not functions.
+
+## Index Support
+
+Without an index, every RE2 filter reads whole table. Two mechanisms below let
+applicable patterns visit only rows that could match, then recheck the exact
+match on each candidate: results never change, only how fast they arrive, with
+one known GIN exception noted below.
+
+Matching, indexed or not, compares raw UTF-8 bytes without Unicode
+normalization: a pattern with a composed character (`é` as one code point)
+will not find a haystack holding its decomposed form (`e` plus combining
+accent). Pattern and haystack must agree on normalization form.
+
+### B-tree range from an anchored prefix
+
+When pattern is a constant starting with `^` and a fixed prefix, `re2match` and
+`@~` filters read only the index range covering that prefix. No query or index
+change needed, provided the index orders bytewise: a `text_pattern_ops` index,
+or a default b-tree whose collation sorts like `C` (`C`, `POSIX`, builtin `C`
+and `C.UTF8`).
+
+```sql
+CREATE INDEX ON logs (msg text_pattern_ops);
+-- reads index range [request_, request`) then rechecks each row
+SELECT * FROM logs WHERE re2match(msg, '^request_id=\d+');
+```
+
+The prefix survives grouping: `^us(?:er|ed)_` scans the range `[use, usf)`.
+Patterns that are unanchored, alternate at top level (`^a|^b`), branch to
+different first characters (`^(a|b)`), or set inline flags (`(?i)`) fall back
+to the plan the query would otherwise get.
+
+### GIN trigram prefilter (`gin_re2_ops`)
+
+`gin_re2_ops` indexes three-character sequences (trigrams) of each value.
+A `@~` query reduces its pattern to literal text every match needs.
+
+Below example finds `connection ` plus `refused` or `timed out` and visits
+only rows containing necessary trigrams, rechecking full pattern on each.
+
+```sql
+CREATE INDEX ON logs USING gin (msg gin_re2_ops);
+SELECT * FROM logs WHERE msg @~ 'connection (refused|timed out)';
+```
+
+False negative: RE2 case-insensitive matching uses Unicode simple folding,
+which relates ASCII `s` and `k` to `ſ` (U+017F) and `K` (U+212A), while index
+trigrams fold ASCII only. An all-ASCII `(?i)` pattern such as `(?i)secret`
+matches `ſecret` on a full scan, but the index skips that row.
 
 ## Versioning Policy
 

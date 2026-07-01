@@ -47,7 +47,7 @@ re2_cache_lookup(const char *pattern, size_t pattern_len, char *errbuf, size_t e
 		if (!entry->pattern)
 		{
 			re2_free(pat);
-			snprintf(errbuf, errbuf_size, "out of memory");
+			strlcpy(errbuf, "out of memory", errbuf_size);
 			return NULL;
 		}
 		memcpy(entry->pattern, pattern, pattern_len);
