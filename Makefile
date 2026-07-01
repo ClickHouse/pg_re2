@@ -7,7 +7,7 @@ DISTVERSION  = $(shell grep -m 1 '^[[:space:]]\{2\}"version":' META.json | \
 
 DATA         = $(wildcard sql/$(EXTENSION)--*.sql)
 MODULE_big   = $(EXTENSION)
-OBJS         = src/pg_re2.o src/re2_cache.o src/re2_wrapper.o
+OBJS         = src/pg_re2.o src/pg_re2_index.o src/re2_cache.o src/re2_wrapper.o
 
 PG_CONFIG   ?= pg_config
 PG_CXXFLAGS  = -std=c++17
@@ -28,17 +28,17 @@ $(OBJS): src/version.h
 src/version.h: src/version.h.in
 	sed -e 's,__VERSION__,$(DISTVERSION),g' $< > $@
 
-.PHONY: format
-format: src/*.c src/*.h src/*.cpp
-	clang-format -i $^
+CLANG_FORMAT ?= clang-format
 
-.PHONY: lint
-lint: src/*.c src/*.h src/*.cpp
-	clang-format --dry-run --Werror $^
+.PHONY: format format22
+format22: CLANG_FORMAT = clang-format-22
+format format22: src/*.c src/*.h src/*.cpp
+	$(CLANG_FORMAT) -i $^
 
-.PHONY: lint22
-lint22: src/*.c src/*.h src/*.cpp
-	clang-format-22 --dry-run --Werror $^
+.PHONY: lint lint22
+lint22: CLANG_FORMAT = clang-format-22
+lint lint22: src/*.c src/*.h src/*.cpp
+	$(CLANG_FORMAT) --dry-run --Werror $^
 
 .PHONY: bench
 bench:

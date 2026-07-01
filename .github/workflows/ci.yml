@@ -26,6 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     container: pgxn/pgxn-tools
     steps:
-      - run: pg-start ${{ matrix.pg }} libre2-dev
+      - run: pg-start ${{ matrix.pg }} libre2-dev libicu-dev
       - uses: actions/checkout@v7
       - run: pg-build-test

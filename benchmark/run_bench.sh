@@ -18,7 +18,7 @@ for i in $(seq 1 "$ITERATIONS"); do
     echo "=== Iteration $i/$ITERATIONS ===" >&2
     "$PSQL" -X -q -f "$SCRIPT_DIR/bench.sql" | while IFS= read -r line; do
         case "$line" in
-            match,*|extract,*|extract_all,*|extract_all_unnest,*|replace_one,*|replace_all,*|count_matches,*)
+            match,*|extract,*|extract_all,*|extract_all_unnest,*|replace_one,*|replace_all,*|count_matches,*|idx_btree,*|idx_gin,*)
                 echo "${line},${i}" ;;
         esac
     done >> "$OUTFILE"

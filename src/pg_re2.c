@@ -47,7 +47,7 @@ compile_arg(text *pattern)
 
 	pat = re2_cache_lookup(VARDATA_ANY(pattern), VARSIZE_ANY_EXHDR(pattern), errbuf, sizeof(errbuf));
 	if (!pat)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("invalid RE2 pattern: %s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("invalid RE2 pattern: %s", errbuf));
 	return pat;
 }
 
@@ -64,7 +64,7 @@ compile_arg_icase(text *pattern)
 
 	pat = re2_cache_lookup(ipat, plen + 4, errbuf, sizeof(errbuf));
 	if (!pat)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("invalid RE2 pattern: %s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("invalid RE2 pattern: %s", errbuf));
 	return pat;
 }
 
@@ -116,7 +116,7 @@ pgre2_extractall(PG_FUNCTION_ARGS)
 		spans
 		= re2_extract_all(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), &count, errbuf, sizeof(errbuf));
 		if (errbuf[0] != '\0')
-			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf)));
+			ereport(ERROR, errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf));
 	}
 
 	elems = (Datum *)palloc(count * sizeof(Datum));
@@ -140,7 +140,7 @@ pgre2_regexpextract(PG_FUNCTION_ARGS)
 	errbuf[0] = '\0';
 	s = re2_regexp_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), group_idx, errbuf, sizeof(errbuf));
 	if (errbuf[0] != '\0')
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf));
 
 	PG_RETURN_DATUM(span_to_text(s));
 }
@@ -161,7 +161,7 @@ pgre2_extractgroups(PG_FUNCTION_ARGS)
 	spans = re2_extract_groups(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), &count, errbuf, sizeof(errbuf));
 
 	if (errbuf[0] != '\0')
-		ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf));
 
 	if (!spans)
 	{
@@ -231,7 +231,7 @@ extractallgroups_common(text *haystack_va, text *pattern, bool vertical, bool as
 	spans = re2_extract_all_groups(pat, hdata, hlen, &matches, &ngroups, errbuf, sizeof(errbuf));
 
 	if (errbuf[0] != '\0')
-		ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf));
 
 	if (!spans || matches == 0)
 		return construct_empty_array(as_bytea ? BYTEAOID : TEXTOID);
@@ -357,7 +357,7 @@ splitbyregexp_common(text *pattern, text *haystack_va, int max_splits, bool as_b
 		errbuf[0] = '\0';
 		spans = re2_split(pat, hdata, hlen, max_splits, &count, errbuf, sizeof(errbuf));
 		if (errbuf[0] != '\0')
-			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf)));
+			ereport(ERROR, errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf));
 
 		if (!spans || count == 0)
 			return construct_empty_array(as_bytea ? BYTEAOID : TEXTOID);
@@ -393,7 +393,7 @@ pgre2_replaceregexpone(PG_FUNCTION_ARGS)
 	result = re2_replace_one(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), VARDATA_ANY(replacement),
 							 VARSIZE_ANY_EXHDR(replacement), errbuf, sizeof(errbuf));
 	if (!result)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf));
 	PG_RETURN_TEXT_P(result);
 }
 
@@ -410,7 +410,7 @@ pgre2_replaceregexpall(PG_FUNCTION_ARGS)
 	result = re2_replace_all(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), VARDATA_ANY(replacement),
 							 VARSIZE_ANY_EXHDR(replacement), errbuf, sizeof(errbuf));
 	if (!result)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf));
 	PG_RETURN_TEXT_P(result);
 }
 
@@ -453,13 +453,13 @@ decon_patterns(ArrayType *arr, int *npatterns)
 		char  errbuf[RE2_ERRBUF_SIZE];
 
 		if (nulls[i])
-			ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("pattern array must not contain NULLs")));
+			ereport(ERROR, errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("pattern array must not contain NULLs"));
 
 		t = DatumGetTextPP(elems[i]);
 		pats[i] = re2_cache_lookup(VARDATA_ANY(t), VARSIZE_ANY_EXHDR(t), errbuf, sizeof(errbuf));
 		if (!pats[i])
-			ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
-							errmsg("invalid RE2 pattern at index %d: %s", i + 1, errbuf)));
+			ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
+					errmsg("invalid RE2 pattern at index %d: %s", i + 1, errbuf));
 	}
 	*npatterns = n;
 	return pats;
@@ -568,7 +568,7 @@ pgre2_extractall_bytea(PG_FUNCTION_ARGS)
 		spans
 		= re2_extract_all(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), &count, errbuf, sizeof(errbuf));
 		if (errbuf[0] != '\0')
-			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf)));
+			ereport(ERROR, errcode(ERRCODE_OUT_OF_MEMORY), errmsg("%s", errbuf));
 	}
 
 	elems = (Datum *)palloc(count * sizeof(Datum));
@@ -592,7 +592,7 @@ pgre2_regexpextract_bytea(PG_FUNCTION_ARGS)
 	errbuf[0] = '\0';
 	s = re2_regexp_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), group_idx, errbuf, sizeof(errbuf));
 	if (errbuf[0] != '\0')
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf));
 
 	PG_RETURN_DATUM(span_to_bytea(s));
 }
@@ -613,7 +613,7 @@ pgre2_extractgroups_bytea(PG_FUNCTION_ARGS)
 	spans = re2_extract_groups(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), &count, errbuf, sizeof(errbuf));
 
 	if (errbuf[0] != '\0')
-		ereport(ERROR, (errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("%s", errbuf));
 
 	if (!spans)
 	{
@@ -674,7 +674,7 @@ pgre2_replaceregexpone_bytea(PG_FUNCTION_ARGS)
 	result = re2_replace_one(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), VARDATA_ANY(replacement),
 							 VARSIZE_ANY_EXHDR(replacement), errbuf, sizeof(errbuf));
 	if (!result)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf));
 	PG_RETURN_BYTEA_P(result);
 }
 
@@ -691,7 +691,7 @@ pgre2_replaceregexpall_bytea(PG_FUNCTION_ARGS)
 	result = re2_replace_all(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack), VARDATA_ANY(replacement),
 							 VARSIZE_ANY_EXHDR(replacement), errbuf, sizeof(errbuf));
 	if (!result)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf)));
+		ereport(ERROR, errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", errbuf));
 	PG_RETURN_BYTEA_P(result);
 }
 
