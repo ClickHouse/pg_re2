@@ -14,17 +14,18 @@ All notable changes to this project will be documented in this file. It uses the
 *   Added `re2_version()`, which returns the full semantic version. This is
     the same value visible in `pg_get_loaded_modules()`, but available in
     Postgres versions prior to 18, and without having to load re2 first.
-*   Index support.
-    *   `WHERE re2match(col, '^order_2025')` a pattern starting with `^` and a
-        fixed prefix now reads only matching range of an existing b-tree index.
-        See [Index Support](doc/re2.md#index-support).
+*   Added Index support, avoiding table scans for patterns that can use an
+    index:
+    *   A pattern starting with `^` and a fixed prefix, such as `WHERE
+        re2match(col, '^order_2025')`, now reads the matching range of an
+        existing b-tree index. See [Index Support](doc/re2.md#index-support).
     *   Added `@~` match operator (same as `re2match`) and `gin_re2_ops`
         operator class. `CREATE INDEX ... USING gin (col gin_re2_ops)` lets
         `WHERE col @~ pattern` only visit rows containing required trigrams.
-    *   Row-count estimates for `re2match` and `@~` filters with a constant
-        pattern now come from testing the pattern against column statistics
-        instead of a fixed guess, so the planner picks better plans around
-        such filters.
+    *   Row-count estimates for `re2match` and `@~` now come from testing
+        patterns against column statistics for patterns containing a constant
+        pattern. In such cases this improves cost estimation over the default
+        fixed guess, allowing the planner to pick better plans.
 
 ### 📔 Notes
 

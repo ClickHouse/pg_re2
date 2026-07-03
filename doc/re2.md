@@ -505,15 +505,16 @@ SELECT * FROM logs WHERE msg @~ 'connection (refused|timed out)';
 ```
 
 `@~` and `re2match(text, text)` match identically, produce the same row
-estimates, and both use the b-tree ranges below. Only `@~` can use a GIN
-index, since Postgres ties GIN operator classes to operators, not functions.
+estimates, and both use the b-tree ranges [described
+below](#b-tree-range-from-an-anchored-prefix). Only `@~` can use a GIN index,
+since Postgres ties GIN operator classes to operators, not functions.
 
 ## Index Support
 
 Without an index, every RE2 filter reads whole table. Two mechanisms below let
 applicable patterns visit only rows that could match, then recheck the exact
-match on each candidate: results never change, only how fast they arrive, with
-one known GIN exception noted below.
+match on each candidate: results never change, only how quickly they arrive,
+with one known GIN exception noted below.
 
 Matching, indexed or not, compares raw UTF-8 bytes without Unicode
 normalization: a pattern with a composed character (`é` as one code point)
@@ -522,11 +523,11 @@ accent). Pattern and haystack must agree on normalization form.
 
 ### B-tree range from an anchored prefix
 
-When pattern is a constant starting with `^` and a fixed prefix, `re2match` and
-`@~` filters read only the index range covering that prefix. No query or index
-change needed, provided the index orders bytewise: a `text_pattern_ops` index,
-or a default b-tree whose collation sorts like `C` (`C`, `POSIX`, builtin `C`
-and `C.UTF8`).
+For a constant pattern starting with `^` and a fixed prefix, `re2match` and
+`@~` read only the index range covering that prefix. This feature requires no
+query or index change, provided the index orders bytewise, such as a
+`text_pattern_ops` index or a default b-tree whose collation sorts like `C`
+(`C`, `POSIX`, builtin `C` and `C.UTF8`).
 
 ```sql
 CREATE INDEX ON logs (msg text_pattern_ops);
@@ -544,8 +545,9 @@ to the plan the query would otherwise get.
 `gin_re2_ops` indexes three-character sequences (trigrams) of each value.
 A `@~` query reduces its pattern to literal text every match needs.
 
-Below example finds `connection ` plus `refused` or `timed out` and visits
-only rows containing necessary trigrams, rechecking full pattern on each.
+This example finds `connection ` plus `refused` or `timed out` via the
+`gin_re2_ops` GIN index and visits only rows containing necessary trigrams,
+rechecking the full pattern on each:
 
 ```sql
 CREATE INDEX ON logs USING gin (msg gin_re2_ops);
