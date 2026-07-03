@@ -25,9 +25,9 @@ Data is 10000 rows of:
 Index scans
 -----------
 
-`re2` also speeds up `re2match` through two index mechanisms (see
-[Index Support]). This compares each against the equivalent PostgreSQL
-index scan over a separate 100000-row table.
+`re2` also speeds up `re2match` through two index mechanisms (see [Index
+Support]). These queries compare each against the equivalent PostgreSQL index
+scan over a separate 100000-row table.
 
 | Mechanism           | re2                          | postgres                     |
 | ------------------- | ---------------------------- | ---------------------------- |
