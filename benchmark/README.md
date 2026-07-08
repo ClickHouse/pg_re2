@@ -36,13 +36,6 @@ scan over a separate 100000-row table.
 
 ![Index benchmark](graph_index.png)
 
-| Category | Pattern                       | rows  | re2     | postgres | re2 vs postgres |
-| -------- | ----------------------------- | ----- | ------- | -------- | --------------- |
-| btree    | `^user5`                      | 11111 | 1.8 ms  | 3.5 ms   | 1.9x faster     |
-| btree    | `^user12[0-9]`                | 1110  | 0.21 ms | 0.43 ms  | 2.0x faster     |
-| gin      | `error_code=123`              | 100   | 3.3 ms  | 3.6 ms   | 1.1x faster     |
-| gin      | `error_code=(100\|200\|300)`  | 301   | 3.5 ms  | 4.9 ms   | 1.4x faster     |
-
 The two GIN opclasses extract keys differently. `pg_trgm` builds trigrams from
 alphanumeric words only (never spanning `_`, `=`, …) and prunes extracted
 trigrams under a fixed penalty budget tuned for natural-language text;
