@@ -436,49 +436,60 @@ pgre2_countmatchescaseinsensitive(PG_FUNCTION_ARGS)
 
 /* ---- multi-pattern helpers ---- */
 
-static re2_pattern **
-decon_patterns(ArrayType *arr, int *npatterns)
+/* Lookup pattern element, ereport on invalid. Pointer valid only until next cache lookup */
+static re2_pattern *
+lookup_pattern(Datum elem, int i)
 {
-	Datum		 *elems;
-	bool		 *nulls;
-	int			  n;
-	re2_pattern **pats;
+	text		*t = DatumGetTextPP(elem);
+	char		 errbuf[RE2_ERRBUF_SIZE];
+	re2_pattern *pat = re2_cache_lookup(VARDATA_ANY(t), VARSIZE_ANY_EXHDR(t), errbuf, sizeof(errbuf));
+
+	if (!pat)
+		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
+				errmsg("invalid RE2 pattern at index %d: %s", i + 1, errbuf));
+	return pat;
+}
+
+/*
+ * Deconstruct pattern array, reject NULLs, return text datums.
+ * validate compiles each pattern upfront so early-exit matchers error on
+ * invalid patterns regardless of haystack; callers visiting every pattern
+ * skip it. Callers lookup per pattern when matching because cache invalidation.
+ */
+static Datum *
+decon_patterns(ArrayType *arr, int *npatterns, bool validate)
+{
+	Datum *elems;
+	bool  *nulls;
+	int	   n;
 
 	deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT, &elems, &nulls, &n);
 
-	pats = (re2_pattern **)palloc(n * sizeof(re2_pattern *));
 	for (int i = 0; i < n; i++)
 	{
-		text *t;
-		char  errbuf[RE2_ERRBUF_SIZE];
-
 		if (nulls[i])
 			ereport(ERROR, errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("pattern array must not contain NULLs"));
-
-		t = DatumGetTextPP(elems[i]);
-		pats[i] = re2_cache_lookup(VARDATA_ANY(t), VARSIZE_ANY_EXHDR(t), errbuf, sizeof(errbuf));
-		if (!pats[i])
-			ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
-					errmsg("invalid RE2 pattern at index %d: %s", i + 1, errbuf));
+		if (validate)
+			(void)lookup_pattern(elems[i], i);
 	}
 	*npatterns = n;
-	return pats;
+	return elems;
 }
 
 PG_FUNCTION_INFO_V1(pgre2_multimatchany);
 Datum
 pgre2_multimatchany(PG_FUNCTION_ARGS)
 {
-	text		 *haystack = PG_GETARG_TEXT_PP(0);
-	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
-	const char	 *hdata = VARDATA_ANY(haystack);
-	size_t		  hlen = VARSIZE_ANY_EXHDR(haystack);
-	int			  n;
-	re2_pattern **pats = decon_patterns(patterns, &n);
+	text	   *haystack = PG_GETARG_TEXT_PP(0);
+	ArrayType  *patterns = PG_GETARG_ARRAYTYPE_P(1);
+	const char *hdata = VARDATA_ANY(haystack);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack);
+	int			n;
+	Datum	   *pats = decon_patterns(patterns, &n, true);
 
 	for (int i = 0; i < n; i++)
 	{
-		if (re2_match(pats[i], hdata, hlen))
+		if (re2_match(lookup_pattern(pats[i], i), hdata, hlen))
 			PG_RETURN_BOOL(true);
 	}
 	PG_RETURN_BOOL(false);
@@ -488,16 +499,16 @@ PG_FUNCTION_INFO_V1(pgre2_multimatchanyindex);
 Datum
 pgre2_multimatchanyindex(PG_FUNCTION_ARGS)
 {
-	text		 *haystack = PG_GETARG_TEXT_PP(0);
-	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
-	const char	 *hdata = VARDATA_ANY(haystack);
-	size_t		  hlen = VARSIZE_ANY_EXHDR(haystack);
-	int			  n;
-	re2_pattern **pats = decon_patterns(patterns, &n);
+	text	   *haystack = PG_GETARG_TEXT_PP(0);
+	ArrayType  *patterns = PG_GETARG_ARRAYTYPE_P(1);
+	const char *hdata = VARDATA_ANY(haystack);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack);
+	int			n;
+	Datum	   *pats = decon_patterns(patterns, &n, true);
 
 	for (int i = 0; i < n; i++)
 	{
-		if (re2_match(pats[i], hdata, hlen))
+		if (re2_match(lookup_pattern(pats[i], i), hdata, hlen))
 			PG_RETURN_INT32(i + 1);
 	}
 	PG_RETURN_INT32(0);
@@ -507,20 +518,20 @@ PG_FUNCTION_INFO_V1(pgre2_multimatchallindices);
 Datum
 pgre2_multimatchallindices(PG_FUNCTION_ARGS)
 {
-	text		 *haystack = PG_GETARG_TEXT_PP(0);
-	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
-	const char	 *hdata = VARDATA_ANY(haystack);
-	size_t		  hlen = VARSIZE_ANY_EXHDR(haystack);
-	int			  n;
-	re2_pattern **pats = decon_patterns(patterns, &n);
-	Datum		 *elems;
-	int			  count = 0;
-	ArrayType	 *arr;
+	text	   *haystack = PG_GETARG_TEXT_PP(0);
+	ArrayType  *patterns = PG_GETARG_ARRAYTYPE_P(1);
+	const char *hdata = VARDATA_ANY(haystack);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack);
+	int			n;
+	Datum	   *pats = decon_patterns(patterns, &n, false);
+	Datum	   *elems;
+	int			count = 0;
+	ArrayType  *arr;
 
 	elems = (Datum *)palloc(n * sizeof(Datum));
 	for (int i = 0; i < n; i++)
 	{
-		if (re2_match(pats[i], hdata, hlen))
+		if (re2_match(lookup_pattern(pats[i], i), hdata, hlen))
 			elems[count++] = Int32GetDatum(i + 1);
 	}
 
@@ -719,16 +730,16 @@ PG_FUNCTION_INFO_V1(pgre2_multimatchany_bytea);
 Datum
 pgre2_multimatchany_bytea(PG_FUNCTION_ARGS)
 {
-	bytea		 *haystack = PG_GETARG_BYTEA_PP(0);
-	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
-	const char	 *hdata = VARDATA_ANY(haystack);
-	size_t		  hlen = VARSIZE_ANY_EXHDR(haystack);
-	int			  n;
-	re2_pattern **pats = decon_patterns(patterns, &n);
+	bytea	   *haystack = PG_GETARG_BYTEA_PP(0);
+	ArrayType  *patterns = PG_GETARG_ARRAYTYPE_P(1);
+	const char *hdata = VARDATA_ANY(haystack);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack);
+	int			n;
+	Datum	   *pats = decon_patterns(patterns, &n, true);
 
 	for (int i = 0; i < n; i++)
 	{
-		if (re2_match(pats[i], hdata, hlen))
+		if (re2_match(lookup_pattern(pats[i], i), hdata, hlen))
 			PG_RETURN_BOOL(true);
 	}
 	PG_RETURN_BOOL(false);
@@ -738,16 +749,16 @@ PG_FUNCTION_INFO_V1(pgre2_multimatchanyindex_bytea);
 Datum
 pgre2_multimatchanyindex_bytea(PG_FUNCTION_ARGS)
 {
-	bytea		 *haystack = PG_GETARG_BYTEA_PP(0);
-	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
-	const char	 *hdata = VARDATA_ANY(haystack);
-	size_t		  hlen = VARSIZE_ANY_EXHDR(haystack);
-	int			  n;
-	re2_pattern **pats = decon_patterns(patterns, &n);
+	bytea	   *haystack = PG_GETARG_BYTEA_PP(0);
+	ArrayType  *patterns = PG_GETARG_ARRAYTYPE_P(1);
+	const char *hdata = VARDATA_ANY(haystack);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack);
+	int			n;
+	Datum	   *pats = decon_patterns(patterns, &n, true);
 
 	for (int i = 0; i < n; i++)
 	{
-		if (re2_match(pats[i], hdata, hlen))
+		if (re2_match(lookup_pattern(pats[i], i), hdata, hlen))
 			PG_RETURN_INT32(i + 1);
 	}
 	PG_RETURN_INT32(0);
@@ -757,20 +768,20 @@ PG_FUNCTION_INFO_V1(pgre2_multimatchallindices_bytea);
 Datum
 pgre2_multimatchallindices_bytea(PG_FUNCTION_ARGS)
 {
-	bytea		 *haystack = PG_GETARG_BYTEA_PP(0);
-	ArrayType	 *patterns = PG_GETARG_ARRAYTYPE_P(1);
-	const char	 *hdata = VARDATA_ANY(haystack);
-	size_t		  hlen = VARSIZE_ANY_EXHDR(haystack);
-	int			  n;
-	re2_pattern **pats = decon_patterns(patterns, &n);
-	Datum		 *elems;
-	int			  count = 0;
-	ArrayType	 *arr;
+	bytea	   *haystack = PG_GETARG_BYTEA_PP(0);
+	ArrayType  *patterns = PG_GETARG_ARRAYTYPE_P(1);
+	const char *hdata = VARDATA_ANY(haystack);
+	size_t		hlen = VARSIZE_ANY_EXHDR(haystack);
+	int			n;
+	Datum	   *pats = decon_patterns(patterns, &n, false);
+	Datum	   *elems;
+	int			count = 0;
+	ArrayType  *arr;
 
 	elems = (Datum *)palloc(n * sizeof(Datum));
 	for (int i = 0; i < n; i++)
 	{
-		if (re2_match(pats[i], hdata, hlen))
+		if (re2_match(lookup_pattern(pats[i], i), hdata, hlen))
 			elems[count++] = Int32GetDatum(i + 1);
 	}
 
