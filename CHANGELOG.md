@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
-## [v0.4.1] — Unreleased
+## [v0.4.1] — 2026-07-09
 
 ### 🐛 Fixes
 
@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file. It uses the
 *   Use RE2::Set to optimize stable multimatch. Avoiding linear scan turns
     `O(patterns * rows)` into `O(patterns + rows)`, for 4 patterns this may
     increase perf 1.3x, while at 10 patterns that grows to 3x.
+
+  [v0.4.1]: https://github.com/clickhouse/pg_re2/compare/v0.4.0...v0.4.1
 
 ## [v0.4.0] — 2026-07-03
 
