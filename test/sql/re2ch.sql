@@ -164,6 +164,17 @@ SELECT re2multimatchanyindex('hello world', '\d+', '^\d+$');
 SELECT re2multimatchallindices('hello world', 'hello', '\d+', 'world', 'o');
 SELECT re2multimatchallindices('test', '\d+', '[A-Z]+');
 
+-- 4+ patterns take RE2::Set path (constant array: compiled once via fn_extra)
+SELECT re2multimatchany('hello world', '\d+', 'x{3}', '^\d+$', 'wor');
+SELECT re2multimatchany('hello world', '\d+', 'x{3}', '^\d+$', 'zzz');
+SELECT re2multimatchanyindex('hello world', '\d+', 'x{3}', 'world', 'hello');
+SELECT re2multimatchanyindex('hello world', '\d+', 'x{3}', '^\d+$', 'zzz');
+SELECT re2multimatchany('hello', 'a+', 'b', 'c', '[invalid');
+-- non-constant array: per-pattern loop fallback
+SELECT re2multimatchallindices(h, VARIADIC arr)
+FROM (VALUES ('xcd', ARRAY['ab','cd','q1','q2']),
+             ('xcd', ARRAY['a','bcd','q1','q2'])) AS t(h, arr);
+
 -- invalid pattern
 SELECT re2match('hello', '[invalid');
 
@@ -196,6 +207,8 @@ SELECT re2countmatches('a'::bytea || '\x00'::bytea || 'b'::bytea || '\x00'::byte
 
 -- multimatchany with \0 haystack
 SELECT re2multimatchany('a'::bytea || '\x00'::bytea || 'key="v"'::bytea, 'key', 'nope');
+-- 4+ patterns: RE2::Set path over \0 haystack
+SELECT re2multimatchanyindex('a'::bytea || '\x00'::bytea || 'key="v"'::bytea, 'q{3}', '\d{5}', 'key', 'nope');
 
 -- extractallgroups with \0
 SELECT re2extractallgroupsvertical('a'::bytea || '\x00'::bytea || 'k1=v1 k2=v2'::bytea, '(\w+)=(\w+)');

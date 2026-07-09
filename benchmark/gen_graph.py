@@ -203,7 +203,7 @@ def plot_speedup(tests, filename='graph.png',
     display_rows = list(reversed(rows))
     speedups = [r[3] for r in rows]
     max_speedup = max(speedups)
-    target = max_speedup * 1.05
+    target = max_speedup
     if axis_cap:
         target = min(target, axis_cap)
     ticks = _tick_values(target)
