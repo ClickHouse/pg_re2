@@ -39,33 +39,86 @@ span_to_bytea(re2_span s)
 	return PointerGetDatum(result);
 }
 
-static re2_pattern *
-compile_arg(text *pattern)
+/*
+ * Compile of stable (Const / extern Param) pattern arg, kept in fn_extra
+ * to skip per-row cache lookup. Owns re2_pattern, avoiding cache management.
+ */
+typedef struct
 {
+	re2_pattern			 *compiled;
+	MemoryContextCallback cb;
+} Re2FnExtra;
+
+static void
+fn_extra_release(void *arg)
+{
+	Re2FnExtra *fx = (Re2FnExtra *)arg;
+
+	if (fx->compiled)
+		re2_free(fx->compiled);
+}
+
+static re2_pattern *
+compile_fn_arg(FunctionCallInfo fcinfo, int argnum, bool icase)
+{
+	FmgrInfo	*flinfo = fcinfo->flinfo;
 	char		 errbuf[RE2_ERRBUF_SIZE];
+	text		*pattern;
+	const char	*data;
+	size_t		 len;
 	re2_pattern *pat;
 
-	pat = re2_cache_lookup(VARDATA_ANY(pattern), VARSIZE_ANY_EXHDR(pattern), errbuf, sizeof(errbuf));
+	if (flinfo && flinfo->fn_extra)
+		return ((Re2FnExtra *)flinfo->fn_extra)->compiled;
+
+	pattern = PG_GETARG_TEXT_PP(argnum);
+	len = VARSIZE_ANY_EXHDR(pattern);
+	if (icase)
+	{
+		char *ipat = (char *)palloc(len + 4);
+
+		memcpy(ipat, "(?i)", 4);
+		memcpy(ipat + 4, VARDATA_ANY(pattern), len);
+		data = ipat;
+		len += 4;
+	}
+	else
+		data = VARDATA_ANY(pattern);
+
+	if (flinfo && get_fn_expr_arg_stable(flinfo, argnum))
+	{
+		Re2FnExtra *fx = (Re2FnExtra *)MemoryContextAllocZero(flinfo->fn_mcxt, sizeof(Re2FnExtra));
+
+		/* register before compile: compiled == NULL keeps callback no-op */
+		fx->cb.func = fn_extra_release;
+		fx->cb.arg = fx;
+		MemoryContextRegisterResetCallback(flinfo->fn_mcxt, &fx->cb);
+
+		pat = re2_compile(data, len, errbuf, sizeof(errbuf));
+		if (pat)
+		{
+			fx->compiled = pat;
+			flinfo->fn_extra = fx;
+		}
+	}
+	else
+		pat = re2_cache_lookup(data, len, errbuf, sizeof(errbuf));
+
 	if (!pat)
 		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("invalid RE2 pattern: %s", errbuf));
 	return pat;
 }
 
 static re2_pattern *
-compile_arg_icase(text *pattern)
+compile_arg(FunctionCallInfo fcinfo, int argnum)
 {
-	char		 errbuf[RE2_ERRBUF_SIZE];
-	size_t		 plen = VARSIZE_ANY_EXHDR(pattern);
-	char		*ipat = (char *)palloc(plen + 4);
-	re2_pattern *pat;
+	return compile_fn_arg(fcinfo, argnum, false);
+}
 
-	memcpy(ipat, "(?i)", 4);
-	memcpy(ipat + 4, VARDATA_ANY(pattern), plen);
-
-	pat = re2_cache_lookup(ipat, plen + 4, errbuf, sizeof(errbuf));
-	if (!pat)
-		ereport(ERROR, errcode(ERRCODE_INVALID_REGULAR_EXPRESSION), errmsg("invalid RE2 pattern: %s", errbuf));
-	return pat;
+static re2_pattern *
+compile_arg_icase(FunctionCallInfo fcinfo, int argnum)
+{
+	return compile_fn_arg(fcinfo, argnum, true);
 }
 
 /* ---- utility function ---- */
@@ -83,7 +136,7 @@ Datum
 pgre2_match(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 
 	PG_RETURN_BOOL(re2_match(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
@@ -93,7 +146,7 @@ Datum
 pgre2_extract(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 
 	PG_RETURN_DATUM(span_to_text(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
 }
@@ -103,7 +156,7 @@ Datum
 pgre2_extractall(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	int			 count;
 	re2_span	*spans;
 	Datum		*elems;
@@ -132,7 +185,7 @@ Datum
 pgre2_regexpextract(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	int			 group_idx = PG_GETARG_INT32(2);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	re2_span	 s;
@@ -150,7 +203,7 @@ Datum
 pgre2_extractgroups(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	int			 count;
 	re2_span	*spans;
@@ -217,9 +270,10 @@ build_groups_2d(re2_span *spans, int matches, int ngroups, bool vertical, span_t
 }
 
 static ArrayType *
-extractallgroups_common(text *haystack_va, text *pattern, bool vertical, bool as_bytea)
+extractallgroups_common(FunctionCallInfo fcinfo, bool vertical, bool as_bytea)
 {
-	re2_pattern *pat = compile_arg(pattern);
+	text		*haystack_va = PG_GETARG_TEXT_PP(0);
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	const char	*hdata = VARDATA_ANY(haystack_va);
 	size_t		 hlen = VARSIZE_ANY_EXHDR(haystack_va);
 	char		 errbuf[RE2_ERRBUF_SIZE];
@@ -244,14 +298,14 @@ PG_FUNCTION_INFO_V1(pgre2_extractallgroupshorizontal);
 Datum
 pgre2_extractallgroupshorizontal(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(PG_GETARG_TEXT_PP(0), PG_GETARG_TEXT_PP(1), false, false));
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(fcinfo, false, false));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_extractallgroupsvertical);
 Datum
 pgre2_extractallgroupsvertical(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(PG_GETARG_TEXT_PP(0), PG_GETARG_TEXT_PP(1), true, false));
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(fcinfo, true, false));
 }
 
 /*
@@ -337,8 +391,11 @@ split_chars(const char *hdata, size_t hlen, int max_splits, bool as_bytea)
  * otherwise re2_split emits substrings between matches. max_splits 0 = unlimited.
  */
 static ArrayType *
-splitbyregexp_common(text *pattern, text *haystack_va, int max_splits, bool as_bytea)
+splitbyregexp_common(FunctionCallInfo fcinfo, bool as_bytea)
 {
+	text	   *pattern = PG_GETARG_TEXT_PP(0);
+	text	   *haystack_va = PG_GETARG_TEXT_PP(1);
+	int			max_splits = PG_NARGS() >= 3 && !PG_ARGISNULL(2) ? PG_GETARG_INT32(2) : 0;
 	const char *hdata = VARDATA_ANY(haystack_va);
 	size_t		hlen = VARSIZE_ANY_EXHDR(haystack_va);
 	size_t		plen = VARSIZE_ANY_EXHDR(pattern);
@@ -347,7 +404,7 @@ splitbyregexp_common(text *pattern, text *haystack_va, int max_splits, bool as_b
 		return split_chars(hdata, hlen, max_splits, as_bytea);
 
 	{
-		re2_pattern *pat = compile_arg(pattern);
+		re2_pattern *pat = compile_arg(fcinfo, 0);
 		char		 errbuf[RE2_ERRBUF_SIZE];
 		int			 count;
 		re2_span	*spans;
@@ -375,9 +432,7 @@ PG_FUNCTION_INFO_V1(pgre2_splitbyregexp);
 Datum
 pgre2_splitbyregexp(PG_FUNCTION_ARGS)
 {
-	int max_splits = PG_NARGS() >= 3 && !PG_ARGISNULL(2) ? PG_GETARG_INT32(2) : 0;
-
-	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common(PG_GETARG_TEXT_PP(0), PG_GETARG_TEXT_PP(1), max_splits, false));
+	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common(fcinfo, false));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_replaceregexpone);
@@ -385,7 +440,7 @@ Datum
 pgre2_replaceregexpone(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	text		*replacement = PG_GETARG_TEXT_PP(2);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	void		*result;
@@ -402,7 +457,7 @@ Datum
 pgre2_replaceregexpall(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	text		*replacement = PG_GETARG_TEXT_PP(2);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	void		*result;
@@ -419,7 +474,7 @@ Datum
 pgre2_countmatches(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
@@ -429,7 +484,7 @@ Datum
 pgre2_countmatchescaseinsensitive(PG_FUNCTION_ARGS)
 {
 	text		*haystack = PG_GETARG_TEXT_PP(0);
-	re2_pattern *pat = compile_arg_icase(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg_icase(fcinfo, 1);
 
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
@@ -546,7 +601,7 @@ Datum
 pgre2_match_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 
 	PG_RETURN_BOOL(re2_match(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
@@ -556,7 +611,7 @@ Datum
 pgre2_extract_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 
 	PG_RETURN_DATUM(span_to_bytea(re2_extract(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack))));
 }
@@ -566,7 +621,7 @@ Datum
 pgre2_extractall_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	int			 count;
 	re2_span	*spans;
 	Datum		*elems;
@@ -595,7 +650,7 @@ Datum
 pgre2_regexpextract_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	int			 group_idx = PG_GETARG_INT32(2);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	re2_span	 s;
@@ -613,7 +668,7 @@ Datum
 pgre2_extractgroups_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	int			 count;
 	re2_span	*spans;
@@ -644,14 +699,14 @@ PG_FUNCTION_INFO_V1(pgre2_extractallgroupshorizontal_bytea);
 Datum
 pgre2_extractallgroupshorizontal_bytea(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_ARRAYTYPE_P(extractallgroups_common((text *)PG_GETARG_BYTEA_PP(0), PG_GETARG_TEXT_PP(1), false, true));
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(fcinfo, false, true));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_extractallgroupsvertical_bytea);
 Datum
 pgre2_extractallgroupsvertical_bytea(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_ARRAYTYPE_P(extractallgroups_common((text *)PG_GETARG_BYTEA_PP(0), PG_GETARG_TEXT_PP(1), true, true));
+	PG_RETURN_ARRAYTYPE_P(extractallgroups_common(fcinfo, true, true));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_regexpquotemeta_bytea);
@@ -667,9 +722,7 @@ PG_FUNCTION_INFO_V1(pgre2_splitbyregexp_bytea);
 Datum
 pgre2_splitbyregexp_bytea(PG_FUNCTION_ARGS)
 {
-	int max_splits = PG_NARGS() >= 3 && !PG_ARGISNULL(2) ? PG_GETARG_INT32(2) : 0;
-
-	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common(PG_GETARG_TEXT_PP(0), (text *)PG_GETARG_BYTEA_PP(1), max_splits, true));
+	PG_RETURN_ARRAYTYPE_P(splitbyregexp_common(fcinfo, true));
 }
 
 PG_FUNCTION_INFO_V1(pgre2_replaceregexpone_bytea);
@@ -677,7 +730,7 @@ Datum
 pgre2_replaceregexpone_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	text		*replacement = PG_GETARG_TEXT_PP(2);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	void		*result;
@@ -694,7 +747,7 @@ Datum
 pgre2_replaceregexpall_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 	text		*replacement = PG_GETARG_TEXT_PP(2);
 	char		 errbuf[RE2_ERRBUF_SIZE];
 	void		*result;
@@ -711,7 +764,7 @@ Datum
 pgre2_countmatches_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg(fcinfo, 1);
 
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
@@ -721,7 +774,7 @@ Datum
 pgre2_countmatchescaseinsensitive_bytea(PG_FUNCTION_ARGS)
 {
 	bytea		*haystack = PG_GETARG_BYTEA_PP(0);
-	re2_pattern *pat = compile_arg_icase(PG_GETARG_TEXT_PP(1));
+	re2_pattern *pat = compile_arg_icase(fcinfo, 1);
 
 	PG_RETURN_INT32(re2_count_matches(pat, VARDATA_ANY(haystack), VARSIZE_ANY_EXHDR(haystack)));
 }
