@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file. It uses the
 
 *   Fix use-after-free caused by reusing re2 pattern after cache invalidation.
 
+### ⚡ Improvements
+
+*   Bypass cache on stable patterns, ~10% improvement removing cache lookups.
+
 ## [v0.4.0] — 2026-07-03
 
 ### ⚡ Improvements
