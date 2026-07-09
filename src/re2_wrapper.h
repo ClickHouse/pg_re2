@@ -11,6 +11,16 @@ extern "C"
 
 #define RE2_ERRBUF_SIZE 64
 
+	/* qsort comparator for int/int32 keys, shared across TUs */
+	static inline int
+	cmp_int32(const void *a, const void *b)
+	{
+		int x = *(const int *)a;
+		int y = *(const int *)b;
+
+		return (x > y) - (x < y);
+	}
+
 	/* span into haystack, no allocation */
 	typedef struct
 	{
@@ -22,11 +32,12 @@ extern "C"
 
 	re2_pattern *re2_compile(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size);
 	void		 re2_free(re2_pattern *pat);
-	int			 re2_num_captures(const re2_pattern *pat);
 
-	bool re2_match(const re2_pattern *pat, const char *text, size_t text_len);
+	/* *failed set on OOM during match, NFA/BitState fallback matchers allocate */
+	bool re2_match(const re2_pattern *pat, const char *text, size_t text_len, bool *failed);
 
-	re2_span re2_extract(const re2_pattern *pat, const char *text, size_t text_len);
+	/* empty span when no match, OOM reported via errbuf */
+	re2_span re2_extract(const re2_pattern *pat, const char *text, size_t text_len, char *errbuf, size_t errbuf_size);
 
 	re2_span *re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *count, char *errbuf,
 							  size_t errbuf_size);
@@ -59,7 +70,24 @@ extern "C"
 	void *re2_replace_all(const re2_pattern *pat, const char *text, size_t text_len, const char *repl, size_t repl_len,
 						  char *errbuf, size_t errbuf_size);
 
+	/* -1 on OOM */
 	int re2_count_matches(const re2_pattern *pat, const char *text, size_t text_len);
+
+	/* RE2::Set: patterns compiled into one automaton, single pass per row */
+	typedef struct re2_set re2_set;
+
+	/* NULL on failure; *err_index = 0-based failing pattern, or -1 for set-wide compile failure */
+	re2_set *re2_set_new(const re2_span *patterns, int npatterns, int *err_index, char *errbuf, size_t errbuf_size);
+	void	 re2_set_free(re2_set *set);
+
+	/* *failed set when DFA exceeds memory budget mid-match, caller must fall back to per-pattern loop */
+	bool re2_set_match_any(const re2_set *set, const char *text, size_t text_len, bool *failed);
+
+	/* fills indices (0-based ascending, capacity >= npatterns), returns count, -1 on DFA failure or OOM */
+	int re2_set_match_indices(const re2_set *set, const char *text, size_t text_len, int *indices);
+
+	/* lowest matched index (0-based), -1 when none; *failed as in re2_set_match_any */
+	int re2_set_match_min(const re2_set *set, const char *text, size_t text_len, bool *failed);
 
 	/*
 	 * Fixed byte prefix shared by every anchored match, derived from

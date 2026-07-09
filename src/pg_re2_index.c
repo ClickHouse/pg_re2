@@ -314,15 +314,6 @@ pack_trgm(const unsigned char *b)
 	return (int32)(((uint32)lc(b[0]) << 16) | ((uint32)lc(b[1]) << 8) | lc(b[2]));
 }
 
-static int
-cmp_int32(const void *a, const void *b)
-{
-	int32 x = *(const int32 *)a;
-	int32 y = *(const int32 *)b;
-
-	return (x > y) - (x < y);
-}
-
 /* free extract_query filter when GIN scan's key context resets; arg NULL
  * until filter exists */
 static void

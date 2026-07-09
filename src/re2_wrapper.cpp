@@ -1,6 +1,7 @@
 extern "C"
 {
 #include "postgres.h"
+#include "utils/memutils.h"
 #if PG_VERSION_NUM >= 160000
 #include "varatt.h"
 #endif
@@ -16,6 +17,7 @@ extern "C"
 #include <new>
 #include <re2/filtered_re2.h>
 #include <re2/re2.h>
+#include <re2/set.h>
 #include <string>
 #include <vector>
 
@@ -37,20 +39,25 @@ default_opts(void)
 re2_pattern *
 re2_compile(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size)
 {
-	auto  opts = default_opts();
-	auto *pat = new (std::nothrow) re2_pattern(opts, re2::StringPiece(pattern, pattern_len));
-	if (!pat)
+	re2_pattern *pat = NULL; /* NULL if ctor throws; delete NULL is safe */
+
+	try
+	{
+		pat = new re2_pattern(default_opts(), re2::StringPiece(pattern, pattern_len));
+		if (!pat->re.ok())
+		{
+			strlcpy(errbuf, pat->re.error().c_str(), errbuf_size);
+			delete pat;
+			return NULL;
+		}
+		return pat;
+	}
+	catch (std::bad_alloc &)
 	{
 		strlcpy(errbuf, "out of memory", errbuf_size);
-		return NULL;
-	}
-	if (!pat->re.ok())
-	{
-		strlcpy(errbuf, pat->re.error().c_str(), errbuf_size);
 		delete pat;
 		return NULL;
 	}
-	return pat;
 }
 
 void
@@ -59,34 +66,28 @@ re2_free(re2_pattern *pat)
 	delete pat;
 }
 
-int
-re2_num_captures(const re2_pattern *pat)
-{
-	return pat->re.NumberOfCapturingGroups();
-}
-
 bool
-re2_match(const re2_pattern *pat, const char *text, size_t text_len)
+re2_match(const re2_pattern *pat, const char *text, size_t text_len, bool *failed)
 {
-	return re2::RE2::PartialMatch(re2::StringPiece(text, text_len), pat->re);
-}
-
-/* run Match, caller must delete[] returned submatch array */
-static bool
-do_match(const re2_pattern *pat, re2::StringPiece input, int ngroups, re2::StringPiece **submatch_out)
-{
-	auto *sub = new (std::nothrow) re2::StringPiece[ngroups + 1];
-	if (!sub)
-		return false;
-
-	if (!pat->re.Match(input, 0, input.size(), re2::RE2::UNANCHORED, sub, ngroups + 1))
+	*failed = false;
+	try
 	{
-		delete[] sub;
-		*submatch_out = NULL;
+		return re2::RE2::PartialMatch(re2::StringPiece(text, text_len), pat->re);
+	}
+	catch (std::bad_alloc &)
+	{
+		/* NFA/BitState fallback matchers allocate */
+		*failed = true;
 		return false;
 	}
-	*submatch_out = sub;
-	return true;
+}
+
+/* run Match filling sub with ngroups+1 pieces, may throw bad_alloc */
+static bool
+do_match(const re2_pattern *pat, re2::StringPiece input, int ngroups, std::vector<re2::StringPiece> &sub)
+{
+	sub.resize(ngroups + 1);
+	return pat->re.Match(input, 0, input.size(), re2::RE2::UNANCHORED, sub.data(), ngroups + 1);
 }
 
 static re2_span
@@ -98,21 +99,41 @@ sp_to_span(re2::StringPiece sp)
 	return s;
 }
 
-re2_span
-re2_extract(const re2_pattern *pat, const char *text, size_t text_len)
+/* NULL on OOM or over palloc cap, oversized request would elog longjmp past live C++ frames */
+static re2_span *
+spans_to_palloc(const std::vector<re2_span> &spans)
 {
-	re2::StringPiece input(text, text_len);
-	int				 ngroups = pat->re.NumberOfCapturingGroups();
-	int				 target = ngroups > 0 ? 1 : 0;
-	re2_span		 empty = { NULL, 0 };
+	size_t nbytes = spans.size() * sizeof(re2_span);
 
-	re2::StringPiece *sub;
-	if (!do_match(pat, input, target, &sub) || !sub)
+	if (nbytes > MaxAllocSize)
+		return NULL;
+	re2_span *out = (re2_span *)palloc_extended(nbytes, MCXT_ALLOC_NO_OOM);
+	if (out)
+		memcpy(out, spans.data(), nbytes);
+	return out;
+}
+
+re2_span
+re2_extract(const re2_pattern *pat, const char *text, size_t text_len, char *errbuf, size_t errbuf_size)
+{
+	int		 ngroups = pat->re.NumberOfCapturingGroups();
+	int		 target = ngroups > 0 ? 1 : 0;
+	re2_span empty = { NULL, 0 };
+
+	errbuf[0] = '\0';
+	try
+	{
+		std::vector<re2::StringPiece> sub;
+
+		if (!do_match(pat, re2::StringPiece(text, text_len), target, sub))
+			return empty;
+		return sp_to_span(sub[target]);
+	}
+	catch (std::bad_alloc &)
+	{
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return empty;
-
-	re2_span result = sp_to_span(sub[target]);
-	delete[] sub;
-	return result;
+	}
 }
 
 re2_span *
@@ -151,13 +172,12 @@ re2_extract_all(const re2_pattern *pat, const char *text, size_t text_len, int *
 	if (spans.empty())
 		return NULL;
 
-	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	re2_span *out = spans_to_palloc(spans);
 	if (!out)
 	{
 		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
-	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
 	*count = (int)spans.size();
 	return out;
 }
@@ -176,19 +196,23 @@ re2_regexp_extract(const re2_pattern *pat, const char *text, size_t text_len, in
 	}
 
 	errbuf[0] = '\0';
+	try
+	{
+		std::vector<re2::StringPiece> sub;
 
-	re2::StringPiece  input(text, text_len);
-	re2::StringPiece *sub;
-	if (!do_match(pat, input, ngroups, &sub) || !sub)
+		if (!do_match(pat, re2::StringPiece(text, text_len), ngroups, sub))
+			return empty;
+
+		re2::StringPiece match = sub[group_idx];
+		if (match.data() == NULL)
+			return empty;
+		return sp_to_span(match);
+	}
+	catch (std::bad_alloc &)
+	{
+		strlcpy(errbuf, "out of memory", errbuf_size);
 		return empty;
-
-	re2::StringPiece match = sub[group_idx];
-	delete[] sub;
-
-	if (match.data() == NULL)
-		return empty;
-
-	return sp_to_span(match);
+	}
 }
 
 re2_span *
@@ -196,39 +220,43 @@ re2_extract_groups(const re2_pattern *pat, const char *text, size_t text_len, in
 				   size_t errbuf_size)
 {
 	int ngroups = pat->re.NumberOfCapturingGroups();
+
+	*count = 0;
 	if (ngroups == 0)
 	{
 		strlcpy(errbuf, "pattern has no capturing groups", errbuf_size);
-		*count = 0;
 		return NULL;
 	}
 
-	re2::StringPiece  input(text, text_len);
-	re2::StringPiece *sub;
-	if (!do_match(pat, input, ngroups, &sub) || !sub)
+	errbuf[0] = '\0';
+	try
 	{
-		errbuf[0] = '\0';
-		*count = 0;
-		return NULL;
-	}
+		std::vector<re2::StringPiece> sub;
 
-	re2_span *out = (re2_span *)palloc_extended(ngroups * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
-	if (!out)
+		if (!do_match(pat, re2::StringPiece(text, text_len), ngroups, sub))
+			return NULL;
+
+		size_t	  nbytes = (size_t)ngroups * sizeof(re2_span);
+		re2_span *out = nbytes > MaxAllocSize ? NULL : (re2_span *)palloc_extended(nbytes, MCXT_ALLOC_NO_OOM);
+		if (!out)
+		{
+			strlcpy(errbuf, "out of memory", errbuf_size);
+			return NULL;
+		}
+		for (int i = 0; i < ngroups; i++)
+		{
+			re2::StringPiece &g = sub[i + 1];
+			out[i].data = g.data();
+			out[i].len = g.data() ? g.size() : 0;
+		}
+		*count = ngroups;
+		return out;
+	}
+	catch (std::bad_alloc &)
 	{
-		delete[] sub;
 		strlcpy(errbuf, "out of memory", errbuf_size);
-		*count = 0;
 		return NULL;
 	}
-	*count = ngroups;
-	for (int i = 0; i < ngroups; i++)
-	{
-		re2::StringPiece &g = sub[i + 1];
-		out[i].data = g.data();
-		out[i].len = g.data() ? g.size() : 0;
-	}
-	delete[] sub;
-	return out;
 }
 
 re2_span *
@@ -250,11 +278,12 @@ re2_extract_all_groups(const re2_pattern *pat, const char *text, size_t text_len
 
 	re2::StringPiece			  input(text, text_len);
 	std::vector<re2_span>		  spans;
-	std::vector<re2::StringPiece> sub(ngroups + 1);
+	std::vector<re2::StringPiece> sub;
 	size_t						  pos = 0;
 
 	try
 	{
+		sub.resize(ngroups + 1);
 		while (pos <= text_len)
 		{
 			if (!pat->re.Match(input, pos, text_len, re2::RE2::UNANCHORED, sub.data(), ngroups + 1))
@@ -282,13 +311,12 @@ re2_extract_all_groups(const re2_pattern *pat, const char *text, size_t text_len
 	if (spans.empty())
 		return NULL;
 
-	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	re2_span *out = spans_to_palloc(spans);
 	if (!out)
 	{
 		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
-	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
 	*match_count = (int)(spans.size() / ngroups);
 	return out;
 }
@@ -344,13 +372,12 @@ re2_split(const re2_pattern *pat, const char *text, size_t text_len, int max_spl
 	if (spans.empty())
 		return NULL;
 
-	re2_span *out = (re2_span *)palloc_extended(spans.size() * sizeof(re2_span), MCXT_ALLOC_NO_OOM);
+	re2_span *out = spans_to_palloc(spans);
 	if (!out)
 	{
 		strlcpy(errbuf, "out of memory", errbuf_size);
 		return NULL;
 	}
-	memcpy(out, spans.data(), spans.size() * sizeof(re2_span));
 	*count = (int)spans.size();
 	return out;
 }
@@ -380,13 +407,16 @@ validate_rewrite(const re2_pattern *pat, const char *repl, size_t repl_len, char
 	return true;
 }
 
-/* palloc varlena ready for PG_RETURN_TEXT_P/PG_RETURN_BYTEA_P, NULL on OOM */
+/* palloc varlena ready for PG_RETURN_TEXT_P/PG_RETURN_BYTEA_P, NULL on OOM or result over varlena cap */
 static void *
 make_varlena(const std::string &s)
 {
 	size_t len = s.size();
-	char  *out = (char *)palloc_extended(len + VARHDRSZ, MCXT_ALLOC_NO_OOM);
 
+	if (len > MaxAllocSize - VARHDRSZ)
+		return NULL;
+
+	char *out = (char *)palloc_extended(len + VARHDRSZ, MCXT_ALLOC_NO_OOM);
 	if (!out)
 		return NULL;
 	SET_VARSIZE(out, len + VARHDRSZ);
@@ -440,24 +470,150 @@ re2_replace_all(const re2_pattern *pat, const char *text, size_t text_len, const
 	}
 }
 
+/* ---- RE2::Set: one automaton over pattern array ---- */
+
+struct re2_set
+{
+	re2::RE2::Set set;
+	re2_set() : set(default_opts(), re2::RE2::UNANCHORED) {}
+};
+
+re2_set *
+re2_set_new(const re2_span *patterns, int npatterns, int *err_index, char *errbuf, size_t errbuf_size)
+{
+	re2_set *s = NULL; /* NULL if ctor throws; delete NULL is safe */
+
+	*err_index = -1;
+	try
+	{
+		s = new re2_set();
+		/* Add attaches match id in insertion order, Match ids follow array order */
+		for (int i = 0; i < npatterns; i++)
+		{
+			std::string err;
+			if (s->set.Add(re2::StringPiece(patterns[i].data, patterns[i].len), &err) < 0)
+			{
+				strlcpy(errbuf, err.c_str(), errbuf_size);
+				*err_index = i;
+				delete s;
+				return NULL;
+			}
+		}
+		/* fails when combined program exceeds max_mem, no per-pattern attribution; Match on uncompiled Set segfaults */
+		if (!s->set.Compile())
+		{
+			strlcpy(errbuf, "pattern set too large - compile failed", errbuf_size);
+			delete s;
+			return NULL;
+		}
+		return s;
+	}
+	catch (std::bad_alloc &)
+	{
+		strlcpy(errbuf, "out of memory", errbuf_size);
+		delete s;
+		return NULL;
+	}
+}
+
+void
+re2_set_free(re2_set *set)
+{
+	delete set;
+}
+
+bool
+re2_set_match_any(const re2_set *set, const char *text, size_t text_len, bool *failed)
+{
+	try
+	{
+		re2::RE2::Set::ErrorInfo ei;
+		bool					 matched = set->set.Match(re2::StringPiece(text, text_len), NULL, &ei);
+
+		/* DFA out of memory: Set has no NFA fallback, unlike RE2 proper */
+		*failed = !matched && ei.kind != re2::RE2::Set::kNoError;
+		return matched;
+	}
+	catch (std::bad_alloc &)
+	{
+		*failed = true;
+		return false;
+	}
+}
+
+int
+re2_set_match_indices(const re2_set *set, const char *text, size_t text_len, int *indices)
+{
+	try
+	{
+		std::vector<int>		 ids;
+		re2::RE2::Set::ErrorInfo ei;
+
+		if (!set->set.Match(re2::StringPiece(text, text_len), &ids, &ei))
+			return ei.kind == re2::RE2::Set::kNoError ? 0 : -1;
+
+		/* Match output unordered, extension semantics want array order */
+		qsort(ids.data(), ids.size(), sizeof(int), cmp_int32);
+		std::copy(ids.begin(), ids.end(), indices);
+		return (int)ids.size();
+	}
+	catch (std::bad_alloc &)
+	{
+		/* vector growth OOM, same fallback as DFA failure */
+		return -1;
+	}
+}
+
+int
+re2_set_match_min(const re2_set *set, const char *text, size_t text_len, bool *failed)
+{
+	try
+	{
+		std::vector<int>		 ids;
+		re2::RE2::Set::ErrorInfo ei;
+
+		if (!set->set.Match(re2::StringPiece(text, text_len), &ids, &ei))
+		{
+			*failed = ei.kind != re2::RE2::Set::kNoError;
+			return -1;
+		}
+		*failed = false;
+		/* Match returning true with vector guarantees nonempty */
+		return *std::min_element(ids.begin(), ids.end());
+	}
+	catch (std::bad_alloc &)
+	{
+		/* vector growth OOM, same fallback as DFA failure */
+		*failed = true;
+		return -1;
+	}
+}
+
 int
 re2_count_matches(const re2_pattern *pat, const char *text, size_t text_len)
 {
-	re2::StringPiece input(text, text_len);
-	re2::StringPiece match;
-	int				 n = 0;
-	size_t			 pos = 0;
-
-	while (pos <= text_len)
+	try
 	{
-		if (!pat->re.Match(input, pos, input.size(), re2::RE2::UNANCHORED, &match, 1))
-			break;
-		size_t match_end = (match.data() - text) + match.size();
-		if (match.size() > 0)
-			n++;
-		pos = match_end > pos ? match_end : pos + 1;
+		re2::StringPiece input(text, text_len);
+		re2::StringPiece match;
+		int				 n = 0;
+		size_t			 pos = 0;
+
+		while (pos <= text_len)
+		{
+			if (!pat->re.Match(input, pos, input.size(), re2::RE2::UNANCHORED, &match, 1))
+				break;
+			size_t match_end = (match.data() - text) + match.size();
+			if (match.size() > 0)
+				n++;
+			pos = match_end > pos ? match_end : pos + 1;
+		}
+		return n;
 	}
-	return n;
+	catch (std::bad_alloc &)
+	{
+		return -1;
+	}
 }
 
 bool
