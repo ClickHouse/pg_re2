@@ -3,7 +3,7 @@
 #include "common/hashfn.h"
 #include "re2_cache.h"
 
-#define RE2_CACHE_SIZE 1000
+#define RE2_CACHE_SIZE 1024
 
 typedef struct
 {

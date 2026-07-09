@@ -7,7 +7,13 @@ All notable changes to this project will be documented in this file. It uses the
   [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
     "Semantic Versioning 2.0.0"
 
-## [v0.4.0] — Unreleased
+## [v0.4.1] — Unreleased
+
+### 🐛 Fixes
+
+*   Fix use-after-free caused by reusing re2 pattern after cache invalidation.
+
+## [v0.4.0] — 2026-07-03
 
 ### ⚡ Improvements
 
