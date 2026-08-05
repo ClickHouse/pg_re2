@@ -9,7 +9,7 @@ extern "C"
 #include <stdbool.h>
 #include <stddef.h>
 
-#define RE2_ERRBUF_SIZE 64
+#define RE2_ERRBUF_SIZE 128
 
 	/* qsort comparator for int/int32 keys, shared across TUs */
 	static inline int
