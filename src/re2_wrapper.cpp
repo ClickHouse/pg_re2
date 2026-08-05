@@ -1,6 +1,8 @@
 extern "C"
 {
 #include "postgres.h"
+
+#include "mb/pg_wchar.h"
 #include "utils/memutils.h"
 #if PG_VERSION_NUM >= 160000
 #include "varatt.h"
@@ -27,6 +29,20 @@ struct re2_pattern
 	re2_pattern(const re2::RE2::Options &opts, re2::StringPiece pat) : re(pat, opts) {}
 };
 
+/*
+ * RE2 error text embeds pattern fragment, so clip at char boundary. A split
+ * multibyte char makes the message unconvertible when client_encoding differs
+ * from server encoding, replacing it with an encoding error
+ */
+static void
+copy_re2_error(char *errbuf, size_t errbuf_size, const std::string &err)
+{
+	int len = pg_mbcliplen(err.data(), (int)err.size(), (int)errbuf_size - 1);
+
+	memcpy(errbuf, err.data(), len);
+	errbuf[len] = '\0';
+}
+
 static re2::RE2::Options
 default_opts(void)
 {
@@ -46,7 +62,7 @@ re2_compile(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf
 		pat = new re2_pattern(default_opts(), re2::StringPiece(pattern, pattern_len));
 		if (!pat->re.ok())
 		{
-			strlcpy(errbuf, pat->re.error().c_str(), errbuf_size);
+			copy_re2_error(errbuf, errbuf_size, pat->re.error());
 			delete pat;
 			return NULL;
 		}
@@ -493,7 +509,7 @@ re2_set_new(const re2_span *patterns, int npatterns, int *err_index, char *errbu
 			std::string err;
 			if (s->set.Add(re2::StringPiece(patterns[i].data, patterns[i].len), &err) < 0)
 			{
-				strlcpy(errbuf, err.c_str(), errbuf_size);
+				copy_re2_error(errbuf, errbuf_size, err);
 				*err_index = i;
 				delete s;
 				return NULL;
