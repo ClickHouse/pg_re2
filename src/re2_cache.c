@@ -1,6 +1,10 @@
 #include "postgres.h"
 
+#if PG_VERSION_NUM >= 170000
+#include "common/hashfn_unstable.h"
+#else
 #include "common/hashfn.h"
+#endif
 #include "re2_cache.h"
 
 #define RE2_CACHE_SIZE 512
@@ -17,7 +21,11 @@ static Re2CacheEntry cache[RE2_CACHE_SIZE];
 re2_pattern *
 re2_cache_lookup(const char *pattern, size_t pattern_len, char *errbuf, size_t errbuf_size)
 {
-	uint32		   h = hash_bytes((const unsigned char *)pattern, (int)pattern_len);
+#if PG_VERSION_NUM >= 170000
+	uint64 h = fasthash64(pattern, pattern_len, 0);
+#else
+	uint32 h = hash_bytes((const unsigned char *)pattern, (int)pattern_len);
+#endif
 	int			   bucket = h % RE2_CACHE_SIZE;
 	Re2CacheEntry *entry = &cache[bucket];
 
